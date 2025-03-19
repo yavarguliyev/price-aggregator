@@ -23,12 +23,17 @@
     "docker:db": "docker-compose up -d"
   },
   "dependencies": {
+    "@nestjs/cache-manager": "^3.0.0",
     "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.0.6",
     "@prisma/client": "^6.5.0",
+    "cache-manager": "^6.4.1",
+    "cache-manager-redis-yet": "^5.1.5",
     "prisma": "^6.5.0",
+    "redis": "^4.7.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"
   },

@@ -234,13 +234,34 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     availability?: boolean;
     provider?: string;
     includeStale?: boolean;
+    page?: number;
+    limit?: number;
   }) {
+    // Set default pagination values
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 10;
+    const skip = (page - 1) * limit;
+    
+    // Prepare the where clause for the main query
+    const whereClause: any = {
+      ...(filters?.name && { 
+        name: { 
+          contains: filters.name, 
+          mode: 'insensitive' as const 
+        } 
+      }),
+      ...(filters?.provider && { providerName: filters.provider }),
+      ...(!filters?.includeStale && { isStale: false }),
+    };
+
+    // First, get the total count for pagination
+    const totalCount = await this.prisma.product.count({
+      where: whereClause,
+    });
+
+    // Then, perform the main query with optimized includes
     const products = await this.prisma.product.findMany({
-      where: {
-        ...(filters?.name && { name: { contains: filters.name, mode: 'insensitive' } }),
-        ...(filters?.provider && { providerName: filters.provider }),
-        ...(!filters?.includeStale && { isStale: false }), // By default, exclude stale products
-      },
+      where: whereClause,
       include: {
         prices: {
           orderBy: { createdAt: 'desc' },
@@ -251,32 +272,67 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
           take: 1,
         },
       },
+      // Add pagination
+      skip,
+      take: limit,
+      // Order by recently updated first
+      orderBy: {
+        updatedAt: 'desc'
+      }
     });
 
-    return products
-      .filter(product => {
+    // Apply in-memory filters for price and availability
+    // These are done in memory because they depend on the latest price/availability
+    const filteredProducts = products.filter(product => {
+      // Only apply price filters if prices exist
+      if (product.prices.length > 0 && (filters?.minPrice !== undefined || filters?.maxPrice !== undefined)) {
         const currentPrice = product.prices[0]?.value;
-        const isAvailable = product.availability[0]?.isAvailable;
         
-        return (
-          (filters?.minPrice === undefined || currentPrice >= filters.minPrice) &&
-          (filters?.maxPrice === undefined || currentPrice <= filters.maxPrice) &&
-          (filters?.availability === undefined || isAvailable === filters.availability)
-        );
-      })
-      .map(product => ({
-        id: product.id,
-        name: product.name,
-        description: product.description,
-        provider: product.providerName,
-        providerId: product.providerId,
-        price: product.prices[0]?.value,
-        currency: product.prices[0]?.currency,
-        isAvailable: product.availability[0]?.isAvailable,
-        isStale: product.isStale,
-        lastFetchedAt: product.lastFetchedAt,
-        updatedAt: product.updatedAt,
-      }));
+        if (filters?.minPrice !== undefined && currentPrice < filters.minPrice) {
+          return false;
+        }
+        
+        if (filters?.maxPrice !== undefined && currentPrice > filters.maxPrice) {
+          return false;
+        }
+      }
+      
+      // Only apply availability filter if an availability record exists
+      if (product.availability.length > 0 && filters?.availability !== undefined) {
+        const isAvailable = product.availability[0]?.isAvailable;
+        if (isAvailable !== filters.availability) {
+          return false;
+        }
+      }
+      
+      return true;
+    });
+
+    // Map to the response format
+    const mappedProducts = filteredProducts.map(product => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      provider: product.providerName,
+      providerId: product.providerId,
+      price: product.prices[0]?.value,
+      currency: product.prices[0]?.currency,
+      isAvailable: product.availability[0]?.isAvailable,
+      isStale: product.isStale,
+      lastFetchedAt: product.lastFetchedAt,
+      updatedAt: product.updatedAt,
+    }));
+
+    // Return with pagination metadata
+    return {
+      data: mappedProducts,
+      meta: {
+        page,
+        limit,
+        totalItems: totalCount,
+        totalPages: Math.ceil(totalCount / limit),
+      }
+    };
   }
 
   async getProductById(id: string) {
