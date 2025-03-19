@@ -13,14 +13,19 @@ This service collects, processes, and serves pricing and availability data from 
 - Change monitoring
 - Simple HTML visualization of product data
 - API key authentication for secure access
+- Rate limiting for API protection
+- Health checks for monitoring
+- Enhanced security with Helmet
 
 ## Tech Stack
 
 - NestJS (TypeScript)
 - PostgreSQL with Prisma ORM
+- Redis for caching
 - Docker for containerization
 - Swagger for API documentation
 - Server-Sent Events (SSE) for real-time updates
+- Circuit Breaker pattern for resilience
 
 ## Setup and Installation
 
@@ -30,7 +35,34 @@ This service collects, processes, and serves pricing and availability data from 
 - npm
 - Docker and Docker Compose
 
-### Installation Steps
+### Using the Deployment Script
+
+The easiest way to get started is using the deployment script:
+
+```bash
+# Make the script executable (first time only)
+chmod +x deploy.sh
+
+# Development mode (PostgreSQL + Redis in Docker, app runs locally)
+./deploy.sh --dev
+
+# Production mode (all components in Docker)
+./deploy.sh --prod
+
+# Build containers before starting
+./deploy.sh --prod --build
+
+# Stop all containers
+./deploy.sh --down
+
+# View container logs
+./deploy.sh --logs
+
+# Display help
+./deploy.sh --help
+```
+
+### Manual Installation Steps
 
 1. Clone the repository
 
@@ -45,10 +77,10 @@ cd price-aggregator-nest
 npm install
 ```
 
-3. Start the PostgreSQL database using Docker
+3. Start the PostgreSQL and Redis databases using Docker
 
 ```bash
-docker-compose up -d
+docker-compose up -d postgres redis
 ```
 
 4. Apply database migrations
@@ -63,24 +95,32 @@ npx prisma migrate dev --name init
 npm run start:dev
 ```
 
-The application will be available at http://localhost:3000
+The application will be available at http://localhost:3000/api
 
 ## API Endpoints
 
 The following endpoints are available:
 
 - `GET /api/products` - Get a list of all aggregated products
-  - Query parameters: `name`, `minPrice`, `maxPrice`, `availability`, `provider`
+  - Query parameters: `name`, `minPrice`, `maxPrice`, `availability`, `provider`, `page`, `limit`, `includeStale`
 - `GET /api/products/:id` - Get detailed information for a specific product
 - `GET /api/products/changes` - Get products with price or availability changes
   - Query parameters: `timeframe` (in minutes)
+- `GET /api/products/stale` - Get products that haven't been updated recently
 
 ### Provider Simulators
 
-The application simulates two product providers:
+The application simulates several product providers:
 
 - `GET /api/provider-one/products` - Get products from Provider One
 - `GET /api/provider-two/products` - Get products from Provider Two
+- `GET /api/provider-three/products` - Get products from Provider Three
+
+### Health Check
+
+A health check endpoint is available at:
+
+- `GET /api/health` - Provides health information about the application
 
 ### Visualization
 
@@ -92,7 +132,7 @@ A simple HTML visualization of products is available at:
 
 API documentation is available using Swagger at:
 
-- `GET /api` - Swagger UI
+- `GET /api-docs` - Swagger UI
 
 ## Authentication
 
@@ -131,25 +171,57 @@ curl -H "x-api-key: your-api-key" http://localhost:3000/api/products
 
 The following endpoints are accessible without an API key:
 
-- `/api` - Swagger UI documentation
+- `/api-docs` - Swagger UI documentation
 - `/visualize` - Real-time product visualization
+- `/api/health` - Health check endpoint
 
 ## Configuration
 
 Configuration is handled through environment variables:
 
 - `DATABASE_URL` - PostgreSQL connection string
+- `REDIS_HOST` - Redis host (default: localhost)
+- `REDIS_PORT` - Redis port (default: 6379)
 - `PORT` - Application port (default: 3000)
 - `API_KEY` - API key for authentication
+- `FETCH_INTERVAL` - Data fetch interval in milliseconds (default: 10000)
+- `STALENESS_THRESHOLD` - Time in milliseconds after which data is considered stale (default: 60000)
 
 These variables can be set in the `.env` file at the root of the project.
 
 ## Docker
 
-The application includes Docker Compose configuration for running PostgreSQL:
+The application includes complete Docker setup:
+
+- `Dockerfile` for the NestJS application
+- `docker-compose.yml` for orchestrating all services
+
+To run the application in Docker:
 
 ```bash
-docker-compose up -d
+# Build and start all services
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+```
+
+## Testing
+
+The application includes unit and integration tests:
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage
+npm run test:cov
+
+# Run tests in watch mode
+npm run test:watch
 ```
 
 ## License

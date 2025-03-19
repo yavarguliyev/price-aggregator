@@ -7,6 +7,8 @@ import { AuthModule } from './auth/auth.module';
 import { RedisCacheModule } from './cache/cache.module';
 import { ResilienceModule } from './common/resilience/resilience.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { HealthModule } from './health/health.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -16,6 +18,11 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     }),
     // Event emitter for real-time updates
     EventEmitterModule.forRoot(),
+    // Rate limiting
+    ThrottlerModule.forRoot([{
+      ttl: 60, // 60 seconds
+      limit: 20, // 20 requests per ttl
+    }]),
     // Redis cache module for performance
     RedisCacheModule,
     // Resilience module for error handling
@@ -24,7 +31,9 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     PrismaModule, 
     ProviderSimulatorModule, 
     AggregatorModule,
-    AuthModule
+    AuthModule,
+    // Health checks
+    HealthModule
   ],
   controllers: [],
   providers: [],

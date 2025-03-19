@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -9,6 +10,9 @@ async function bootstrap() {
   // Apply global pipes for validation
   app.useGlobalPipes(new ValidationPipe({ transform: true }));
   
+  // Apply security middleware
+  app.use(helmet());
+
   // Swagger documentation setup
   const config = new DocumentBuilder()
     .setTitle('Price Aggregator API')
