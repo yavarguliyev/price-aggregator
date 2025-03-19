@@ -20,6 +20,7 @@ export class ProviderThreeService {
         price: 79.99,
         currency: 'GBP',
         availability: true,
+        isAvailable: true,
         lastUpdated: new Date(),
       },
       {
@@ -29,15 +30,17 @@ export class ProviderThreeService {
         price: 89.99,
         currency: 'GBP',
         availability: true,
+        isAvailable: true,
         lastUpdated: new Date(),
       },
       {
         id: 'course-003',
         name: 'GraphQL API Development',
         description: 'Build efficient APIs with GraphQL',
-        price: 64.99,
+        price: 69.99,
         currency: 'GBP',
         availability: false,
+        isAvailable: false,
         lastUpdated: new Date(),
       },
       {
@@ -47,15 +50,17 @@ export class ProviderThreeService {
         price: 74.99,
         currency: 'GBP',
         availability: true,
+        isAvailable: true,
         lastUpdated: new Date(),
       },
       {
         id: 'course-005',
         name: 'Cybersecurity Essentials',
         description: 'Learn how to secure applications and infrastructure',
-        price: 94.99,
+        price: 99.99,
         currency: 'GBP',
         availability: true,
+        isAvailable: true,
         lastUpdated: new Date(),
       },
     ];
@@ -68,16 +73,19 @@ export class ProviderThreeService {
   }
 
   private updateRandomProduct(): void {
-    const index = Math.floor(Math.random() * this.products.length);
-    const product = this.products[index];
+    const randomIndex = Math.floor(Math.random() * this.products.length);
+    const product = this.products[randomIndex];
     
-    // Randomly change price by +/- 8%
-    const priceChange = (Math.random() - 0.5) * 0.16;
-    product.price = parseFloat((product.price * (1 + priceChange)).toFixed(2));
+    // Randomly change price 
+    if (Math.random() < 0.25) {
+      const priceChange = (Math.random() - 0.5) * 15; // -7.5 to +7.5
+      product.price = Math.max(19.99, +(product.price + priceChange).toFixed(2));
+    }
     
-    // Randomly change availability with 15% chance
+    // Randomly change availability
     if (Math.random() < 0.15) {
       product.availability = !product.availability;
+      product.isAvailable = product.availability; // Keep them in sync
     }
     
     product.lastUpdated = new Date();

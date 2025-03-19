@@ -5,5 +5,6 @@ export interface ProviderProduct {
   price: number;
   currency: string;
   availability: boolean;
+  isAvailable: boolean;
   lastUpdated: Date;
 } 

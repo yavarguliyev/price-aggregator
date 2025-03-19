@@ -15,7 +15,11 @@ display_help() {
   echo "  --prod         Start in production mode"
   echo "  --build        Build the containers"
   echo "  --down         Stop the containers"
+  echo "  --clean        Remove containers, images, and volumes"
+  echo "  --prune        Remove unused Docker resources (images, volumes, networks)"
   echo "  --logs         Show container logs"
+  echo "  --restart      Restart containers"
+  echo "  --status       Show container status"
   echo "  --help         Display this help message"
   echo ""
 }
@@ -30,6 +34,10 @@ fi
 # Parse command-line arguments
 COMMAND=""
 BUILD=""
+CLEAN=""
+PRUNE=""
+RESTART=""
+STATUS=""
 
 if [ "$#" -eq 0 ]; then
   display_help
@@ -39,11 +47,11 @@ fi
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --dev)
-      COMMAND="docker-compose up -d postgres redis"
+      COMMAND="docker compose up -d postgres redis"
       echo "Starting development environment..."
       ;;
     --prod)
-      COMMAND="docker-compose up -d"
+      COMMAND="docker compose up -d"
       echo "Starting production environment..."
       ;;
     --build)
@@ -51,12 +59,28 @@ while [ "$#" -gt 0 ]; do
       echo "Building containers..."
       ;;
     --down)
-      COMMAND="docker-compose down"
+      COMMAND="docker compose down"
       echo "Stopping containers..."
       ;;
+    --clean)
+      CLEAN=true
+      echo "Removing containers, images, and volumes..."
+      ;;
+    --prune)
+      PRUNE=true
+      echo "Pruning unused Docker resources..."
+      ;;
     --logs)
-      COMMAND="docker-compose logs -f"
+      COMMAND="docker compose logs -f"
       echo "Showing logs..."
+      ;;
+    --restart)
+      RESTART=true
+      echo "Restarting containers..."
+      ;;
+    --status)
+      STATUS=true
+      echo "Showing container status..."
       ;;
     --help)
       display_help
@@ -71,9 +95,35 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# Execute command
+# Execute command for status (doesn't affect other commands)
+if [ "$STATUS" = true ]; then
+  docker compose ps
+fi
+
+# Clean up containers, images, and volumes
+if [ "$CLEAN" = true ]; then
+  echo "Stopping and removing containers..."
+  docker compose down --rmi all --volumes --remove-orphans
+  echo "Cleanup completed!"
+fi
+
+# Prune unused Docker resources
+if [ "$PRUNE" = true ]; then
+  echo "Pruning unused Docker resources..."
+  docker system prune -af --volumes
+  echo "Pruning completed!"
+fi
+
+# Restart containers
+if [ "$RESTART" = true ]; then
+  echo "Restarting containers..."
+  docker compose restart
+  echo "Restart completed!"
+fi
+
+# Execute main command
 if [ -n "$COMMAND" ]; then
-  if [ -n "$BUILD" ] && [ "$COMMAND" != "docker-compose down" ] && [ "$COMMAND" != "docker-compose logs -f" ]; then
+  if [ -n "$BUILD" ] && [ "$COMMAND" != "docker compose down" ] && [ "$COMMAND" != "docker compose logs -f" ]; then
     $COMMAND $BUILD
   else
     $COMMAND
@@ -81,7 +131,7 @@ if [ -n "$COMMAND" ]; then
 fi
 
 # If we're in dev mode, start the app after the services
-if [ "$COMMAND" = "docker-compose up -d postgres redis" ]; then
+if [ "$COMMAND" = "docker compose up -d postgres redis" ]; then
   echo "Starting application in development mode..."
   npm run start:dev
 fi
