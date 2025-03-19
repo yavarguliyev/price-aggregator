@@ -1,25 +1,77 @@
-import { Injectable } from "@nestjs/common";
-import { PrismaService } from "./prisma/prisma.service";
-import { Prisma } from "@prisma/client";
-import { ProviderProduct } from "../../domain/entities/product.model";
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from './prisma/prisma.service';
+import { Prisma, Product } from '@prisma/client';
+import { ProviderProduct } from '../../domain/entities/product.model';
+
+type PrismaProduct = Prisma.ProductGetPayload<{
+  include: {
+    prices: true;
+    availability: true;
+  };
+}>;
 
 @Injectable()
 export class ProductRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findUnique(id: string) {
-    return this.prisma.product.findUnique({
+  async findById(id: string): Promise<Product | null> {
+    const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
-        prices: {
-          orderBy: { createdAt: "desc" },
-        },
-        availability: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
+        prices: { orderBy: { createdAt: 'desc' },  take: 1 },
+        availability: { orderBy: { createdAt: 'desc' },  take: 1 }
       },
     });
+    return product ? this.mapToEntity(product) : null;
+  }
+
+  async findAll(): Promise<Product[]> {
+    const products = await this.prisma.product.findMany({
+      include: {
+        prices: { orderBy: { createdAt: 'desc' },  take: 1 },
+        availability: { orderBy: { createdAt: 'desc' },  take: 1 }
+      },
+    });
+    return products.map((product) => this.mapToEntity(product));
+  }
+
+  async findStaleProducts(): Promise<Product[]> {
+    const now = new Date();
+    const products = await this.prisma.product.findMany({
+      where: { lastFetchedAt: { lt: now } },
+      include: {
+        prices: { orderBy: { createdAt: 'desc' }, take: 1 },
+        availability: { orderBy: { createdAt: 'desc' }, take: 1 }
+      },
+    });
+
+    return products.map((product) => this.mapToEntity(product));
+  }
+
+  async updateById(id: string, data: Partial<Product>): Promise<Product> {
+    const product = await this.prisma.product.update({
+      where: { id },
+      data,
+      include: {
+        prices: { orderBy: { createdAt: 'desc' }, take: 1 },
+        availability: { orderBy: { createdAt: 'desc' }, take: 1 }
+      }
+    });
+    return this.mapToEntity(product);
+  }
+
+  private mapToEntity(data: PrismaProduct): Product {
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      providerName: data.providerName,
+      providerId: data.providerId,
+      lastFetchedAt: data.lastFetchedAt,
+      isStale: data.isStale,
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt
+    };
   }
 
   async findMany(params: {
@@ -35,14 +87,8 @@ export class ProductRepository {
       where,
       orderBy,
       include: {
-        prices: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-        availability: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
+        prices: { orderBy: { createdAt: 'desc' }, take: 1 },
+        availability: { orderBy: { createdAt: 'desc' }, take: 1 }
       },
     });
   }
@@ -51,35 +97,11 @@ export class ProductRepository {
     return this.prisma.product.count({ where });
   }
 
-  async findStaleProducts(stalenessThreshold: number) {
-    const staleDate = new Date(Date.now() - stalenessThreshold);
-    return this.prisma.product.findMany({
-      where: {
-        isStale: true,
-      },
-      include: {
-        prices: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-        availability: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-      },
-    });
-  }
-
   async markStaleProducts(stalenessThreshold: number) {
     const staleDate = new Date(Date.now() - stalenessThreshold);
     return this.prisma.product.updateMany({
-      where: {
-        lastFetchedAt: { lt: staleDate },
-        isStale: false,
-      },
-      data: {
-        isStale: true,
-      },
+      where: { lastFetchedAt: { lt: staleDate }, isStale: false },
+      data: { isStale: true },
     });
   }
 
@@ -87,34 +109,21 @@ export class ProductRepository {
     providerName: string,
     providerProduct: ProviderProduct,
   ) {
-    // First, find if the product already exists
     const existingProduct = await this.prisma.product.findFirst({
-      where: {
-        providerName,
-        providerId: providerProduct.id,
-      },
+      where: { providerName, providerId: providerProduct.id },
       include: {
-        prices: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
-        availability: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-        },
+        prices: { orderBy: { createdAt: 'desc' }, take: 1 },
+        availability: { orderBy: { createdAt: 'desc' }, take: 1 }
       },
     });
 
-    // Create or update product
     const product = await this.prisma.product.upsert({
-      where: {
-        id: existingProduct?.id || "create-new",
-      },
+      where: { id: existingProduct?.id || 'create-new' },
       update: {
         name: providerProduct.name,
         description: providerProduct.description,
         lastFetchedAt: new Date(),
-        isStale: false,
+        isStale: false
       },
       create: {
         providerName,
@@ -122,16 +131,11 @@ export class ProductRepository {
         name: providerProduct.name,
         description: providerProduct.description,
         lastFetchedAt: new Date(),
-        isStale: false,
+        isStale: false
       },
     });
 
-    // Handle price update if needed
-    if (
-      !existingProduct?.prices[0] ||
-      existingProduct.prices[0].value !== providerProduct.price ||
-      existingProduct.prices[0].currency !== providerProduct.currency
-    ) {
+    if (!existingProduct?.prices[0] || existingProduct.prices[0].value !== providerProduct.price || existingProduct.prices[0].currency !== providerProduct.currency) {
       await this.prisma.price.create({
         data: {
           productId: product.id,
@@ -141,12 +145,7 @@ export class ProductRepository {
       });
     }
 
-    // Handle availability update if needed
-    if (
-      !existingProduct?.availability[0] ||
-      existingProduct.availability[0].isAvailable !==
-        providerProduct.isAvailable
-    ) {
+    if (!existingProduct?.availability[0] || existingProduct.availability[0].isAvailable !== providerProduct.isAvailable) {
       await this.prisma.availability.create({
         data: {
           productId: product.id,
@@ -160,29 +159,17 @@ export class ProductRepository {
 
   async findPriceChanges(timeLimit: Date) {
     return this.prisma.price.findMany({
-      where: {
-        createdAt: { gt: timeLimit },
-      },
-      include: {
-        product: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+      where: { createdAt: { gt: timeLimit } },
+      include: { product: true },
+      orderBy: { createdAt: 'desc' }
     });
   }
 
   async findAvailabilityChanges(timeLimit: Date) {
     return this.prisma.availability.findMany({
-      where: {
-        createdAt: { gt: timeLimit },
-      },
-      include: {
-        product: true,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
+      where: { createdAt: { gt: timeLimit } },
+      include: { product: true },
+      orderBy: { createdAt: 'desc' }
     });
   }
 }
