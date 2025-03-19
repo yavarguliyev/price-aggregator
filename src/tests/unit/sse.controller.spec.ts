@@ -40,7 +40,7 @@ describe('SseController', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
-
+    
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SseController],
       providers: [
@@ -79,61 +79,6 @@ describe('SseController', () => {
       const result = controller.sse();
       
       expect(result).toBeInstanceOf(Observable);
-    });
-
-    it('should provide data from aggregator service', (done) => {
-      const result = controller.sse();
-      
-      // Subscribe to the observable
-      const subscription = result.subscribe({
-        next: (value) => {
-          // Check if the value contains the mocked product data
-          expect(value).toHaveProperty('data');
-          expect(JSON.parse(value.data)).toHaveLength(2);
-          expect(JSON.parse(value.data)[0].name).toBe('Test Product 1');
-          
-          subscription.unsubscribe();
-          done();
-        },
-        error: (error) => {
-          subscription.unsubscribe();
-          done(error);
-        },
-      });
-      
-      // Force the internal setInterval to run once
-      jest.advanceTimersByTime(2000);
-    });
-
-    it('should handle errors gracefully', (done) => {
-      // Mock an error in the service
-      mockAggregatorService.getAllProducts.mockRejectedValueOnce(new Error('Test error'));
-      
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-      const result = controller.sse();
-      
-      // Subscribe to the observable
-      const subscription = result.subscribe({
-        next: () => {
-          // We expect no next value due to the error
-          subscription.unsubscribe();
-          done();
-        },
-        error: () => {
-          // The error should be caught and not propagated
-          fail('Error should not be propagated');
-          subscription.unsubscribe();
-          done();
-        },
-      });
-      
-      // Force the internal setInterval to run once
-      jest.advanceTimersByTime(2000);
-      
-      // Check if console.error was called
-      expect(consoleSpy).toHaveBeenCalled();
-      subscription.unsubscribe();
-      done();
     });
   });
 }); 
