@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProviderOneService } from '../provider-simulator/providers/provider-one.service';
 import { ProviderTwoService } from '../provider-simulator/providers/provider-two.service';
@@ -6,9 +6,10 @@ import { ProviderProduct } from '../provider-simulator/models/product.model';
 import { Availability, Price, Product } from '@prisma/client';
 
 @Injectable()
-export class AggregatorService implements OnModuleInit {
+export class AggregatorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AggregatorService.name);
   private readonly fetchInterval = 10000; // 10 seconds
+  private intervalId: NodeJS.Timeout | null = null;
   
   constructor(
     private readonly prisma: PrismaService,
@@ -21,9 +22,23 @@ export class AggregatorService implements OnModuleInit {
     await this.fetchAllProviders();
     
     // Set up interval for regular fetching
-    setInterval(async () => {
+    this.intervalId = setInterval(async () => {
       await this.fetchAllProviders();
     }, this.fetchInterval);
+    
+    // Prevent keeping Node process alive
+    if (this.intervalId.unref) {
+      this.intervalId.unref();
+    }
+  }
+  
+  onModuleDestroy() {
+    // Clean up the interval when the module is destroyed
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+      this.logger.log('Data fetching interval cleared');
+    }
   }
 
   async fetchAllProviders() {

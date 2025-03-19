@@ -218,7 +218,12 @@ describe('AggregatorService', () => {
     providerTwoService = module.get<ProviderTwoService>(ProviderTwoService);
 
     // Disable the interval in onModuleInit
-    jest.spyOn(global, 'setInterval').mockImplementation(() => 999 as any);
+    jest.spyOn(global, 'setInterval').mockImplementation(() => {
+      return { unref: jest.fn() } as unknown as NodeJS.Timeout;
+    });
+    
+    // Mock clearInterval to ensure it doesn't throw errors
+    jest.spyOn(global, 'clearInterval').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -402,6 +407,26 @@ describe('AggregatorService', () => {
           }),
         }),
       );
+    });
+  });
+
+  describe('onModuleDestroy', () => {
+    it('should clear the interval when module is destroyed', () => {
+      // Mock the intervalId property
+      const mockIntervalId = {} as NodeJS.Timeout;
+      Object.defineProperty(service, 'intervalId', {
+        get: jest.fn(() => mockIntervalId),
+        set: jest.fn()
+      });
+      
+      // Spy on clearInterval
+      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+      
+      // Call the method under test
+      service.onModuleDestroy();
+      
+      // Verify clearInterval was called with the mock interval ID
+      expect(clearIntervalSpy).toHaveBeenCalledWith(mockIntervalId);
     });
   });
 }); 

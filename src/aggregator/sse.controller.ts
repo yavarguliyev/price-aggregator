@@ -87,8 +87,15 @@ export class SseController {
         }
       }, 2000);
 
+      // Prevent the timer from keeping the process alive
+      if (intervalId.unref) {
+        intervalId.unref();
+      }
+
       // Clean up on unsubscribe
-      return () => clearInterval(intervalId);
+      return () => {
+        clearInterval(intervalId);
+      };
     });
   }
 } 
