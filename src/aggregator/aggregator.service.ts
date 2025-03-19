@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { PrismaService } from '../prisma/prisma.service';
 import { ProviderOneService } from '../provider-simulator/providers/provider-one.service';
 import { ProviderTwoService } from '../provider-simulator/providers/provider-two.service';
+import { ProviderThreeService } from '../provider-simulator/providers/provider-three.service';
 import { ProviderProduct } from '../provider-simulator/models/product.model';
 import { Availability, Price, Product } from '@prisma/client';
 
@@ -15,6 +16,7 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly providerOneService: ProviderOneService,
     private readonly providerTwoService: ProviderTwoService,
+    private readonly providerThreeService: ProviderThreeService,
   ) {}
 
   async onModuleInit() {
@@ -47,6 +49,7 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       await Promise.all([
         this.fetchAndSaveProviderData('provider-one', this.providerOneService.getProducts()),
         this.fetchAndSaveProviderData('provider-two', this.providerTwoService.getProducts()),
+        this.fetchAndSaveProviderData('provider-three', this.providerThreeService.getProducts()),
       ]);
       this.logger.log('Successfully fetched data from all providers');
     } catch (error) {
