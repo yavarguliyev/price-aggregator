@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "test/**/*.spec.ts",
+    "test/**/*.e2e-spec.ts",
+    "test/**/*.integration.spec.ts"
+  ]
+} 
