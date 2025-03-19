@@ -1,6 +1,11 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ProductService } from './product.service';
-import { ProviderService } from './provider.service';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from "@nestjs/common";
+import { ProductService } from "./product.service";
+import { ProviderService } from "./provider.service";
 
 @Injectable()
 export class AggregatorService implements OnModuleInit, OnModuleDestroy {
@@ -34,7 +39,9 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       const products = await this.productService.getStaleProducts();
       return { data: products };
     } catch (error) {
-      this.logger.error(`Error getting stale products: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Error getting stale products: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return { data: [] };
     }
   }
@@ -52,7 +59,9 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     try {
       return await this.productService.getAllProducts(filters);
     } catch (error) {
-      this.logger.error(`Error getting all products: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Error getting all products: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       return {
         data: [],
@@ -68,7 +77,9 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       const product = await this.productService.getProductById(id);
       return { data: product };
     } catch (error) {
-      this.logger.error(`Error getting product by ID ${id}: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Error getting product by ID ${id}: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       return { data: null };
     }
@@ -79,7 +90,9 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       const changes = await this.providerService.getChanges(timeframe);
       return { data: changes };
     } catch (error) {
-      this.logger.error(`Error getting changes: ${error instanceof Error ? error.message : String(error)}`);
+      this.logger.error(
+        `Error getting changes: ${error instanceof Error ? error.message : String(error)}`,
+      );
 
       return { data: [] };
     }

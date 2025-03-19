@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable } from "@nestjs/common";
 
 interface AxiosError {
   response?: {
@@ -21,7 +21,7 @@ export class RetryConfig {
   }
 
   shouldRetry(error: unknown): boolean {
-    if (!error || typeof error !== 'object') {
+    if (!error || typeof error !== "object") {
       return false;
     }
 
@@ -29,7 +29,7 @@ export class RetryConfig {
 
     if (!axiosError.response) {
       if (axiosError.code) {
-        const networkErrorCodes = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'];
+        const networkErrorCodes = ["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED"];
         return networkErrorCodes.includes(axiosError.code);
       }
 

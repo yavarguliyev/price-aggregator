@@ -5,15 +5,39 @@ import { ProductRepository } from "../../src/infrastructure/persistence/product.
 import { Logger } from "@nestjs/common";
 import { Product } from "@prisma/client";
 
-// Mock type for product result
-interface ProductWithDetails extends Product {
+interface ProductWithDetails {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  isAvailable: boolean;
+  provider: string;
+  providerId: string;
+  lastFetchedAt: Date;
+  isStale: boolean;
+  createdAt: Date;
+  updatedAt: Date;
   priceHistory?: Array<{
     id: string;
-    value: number;
+    amount: number;
     currency: string;
     date: Date;
   }>;
   staleReason?: string;
+  prices?: Array<{
+    id: string;
+    amount: number;
+    currency: string;
+    createdAt: Date;
+    productId: string;
+  }>;
+  availability?: Array<{
+    id: string;
+    isAvailable: boolean;
+    createdAt: Date;
+    productId: string;
+  }>;
 }
 
 describe("ProductService", () => {
@@ -22,7 +46,6 @@ describe("ProductService", () => {
   let eventEmitter: EventEmitter2;
 
   beforeEach(async () => {
-    // Mock repository methods
     const mockProductRepository = {
       findStaleProducts: jest.fn(),
       markStaleProducts: jest.fn(),
@@ -31,17 +54,15 @@ describe("ProductService", () => {
       findById: jest.fn(),
     };
 
-    // Mock config service
     const mockConfigService = {
       get: jest
         .fn()
         .mockImplementation((key: string, defaultValue: unknown) => {
-          if (key === "STALENESS_THRESHOLD") return 60000; // 1 minute
+          if (key === "STALENESS_THRESHOLD") return 60000;
           return defaultValue;
         }),
     };
 
-    // Mock event emitter
     const mockEventEmitter = {
       emit: jest.fn(),
     };
@@ -64,7 +85,6 @@ describe("ProductService", () => {
       ],
     }).compile();
 
-    // Override Logger to avoid console output during tests
     jest.spyOn(Logger, "warn").mockImplementation(() => {});
     jest.spyOn(Logger, "error").mockImplementation(() => {});
     jest.spyOn(Logger, "log").mockImplementation(() => {});
@@ -81,22 +101,24 @@ describe("ProductService", () => {
 
   describe("getStaleProducts", () => {
     it("should return stale products from the repository", async () => {
-      // Type the mock products correctly
       const mockStaleProducts = [
         {
           id: "1",
           name: "Stale Product",
           description: "This product is stale",
-          providerName: "provider-one",
+          price: 100,
+          currency: "USD",
+          isAvailable: false,
+          provider: "provider-one",
           providerId: "stale-1",
           isStale: true,
-          lastFetchedAt: new Date(Date.now() - 120000), // 2 minutes ago
+          lastFetchedAt: new Date(Date.now() - 120000),
           updatedAt: new Date(Date.now() - 120000),
           createdAt: new Date(Date.now() - 120000),
           prices: [
             {
               id: "price-1",
-              value: 100,
+              amount: 100,
               currency: "USD",
               createdAt: new Date(),
               productId: "1",
@@ -138,8 +160,10 @@ describe("ProductService", () => {
 
       await service.checkAndMarkStaleProducts();
 
-      const expectedThreshold = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-      expect(productRepository.markStaleProducts).toHaveBeenCalledWith(expectedThreshold);
+      const expectedThreshold = 24 * 60 * 60 * 1000;
+      expect(productRepository.markStaleProducts).toHaveBeenCalledWith(
+        expectedThreshold,
+      );
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         "products.stale.checked",
         expect.any(Object),
@@ -151,16 +175,15 @@ describe("ProductService", () => {
       jest
         .spyOn(productRepository, "markStaleProducts")
         .mockResolvedValue(mockStaleResult);
-      
-      // Reset the mock to clear previous calls
+
       jest.spyOn(eventEmitter, "emit").mockClear();
 
       await service.checkAndMarkStaleProducts();
 
-      const expectedThreshold = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-      expect(productRepository.markStaleProducts).toHaveBeenCalledWith(expectedThreshold);
-      // This test doesn't make sense anymore since we always emit the event
-      // Let's check that we at least emit the correct event
+      const expectedThreshold = 24 * 60 * 60 * 1000;
+      expect(productRepository.markStaleProducts).toHaveBeenCalledWith(
+        expectedThreshold,
+      );
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         "products.stale.checked",
         expect.any(Object),
@@ -200,7 +223,7 @@ describe("ProductService", () => {
 
       expect(productRepository.count).toHaveBeenCalledWith({
         name: { contains: "test", mode: "insensitive" },
-        providerName: "provider-one",
+        provider: "provider-one",
       });
 
       expect(productRepository.findMany).toHaveBeenCalledWith({
@@ -208,7 +231,7 @@ describe("ProductService", () => {
         take: 5,
         where: {
           name: { contains: "test", mode: "insensitive" },
-          providerName: "provider-one",
+          provider: "provider-one",
         },
         orderBy: { updatedAt: "desc" },
       });
@@ -221,7 +244,7 @@ describe("ProductService", () => {
         id: "123",
         name: "Test Product",
         description: "Test Description",
-        providerName: "provider-one",
+        provider: "provider-one",
         providerId: "test-123",
         isStale: false,
         lastFetchedAt: new Date(),
@@ -230,14 +253,14 @@ describe("ProductService", () => {
         prices: [
           {
             id: "price-1",
-            value: 100,
+            amount: 100,
             currency: "USD",
             createdAt: new Date(),
             productId: "123",
           },
           {
             id: "price-2",
-            value: 90,
+            amount: 90,
             currency: "USD",
             createdAt: new Date(Date.now() - 86400000),
             productId: "123",
@@ -254,13 +277,13 @@ describe("ProductService", () => {
         priceHistory: [
           {
             id: "price-1",
-            value: 100,
+            amount: 100,
             currency: "USD",
             date: new Date(),
           },
           {
             id: "price-2",
-            value: 90,
+            amount: 90,
             currency: "USD",
             date: new Date(Date.now() - 86400000),
           },
@@ -289,11 +312,12 @@ describe("ProductService", () => {
 
       try {
         await service.getProductById("non-existent");
-        // If we reach here, the test should fail
         fail("Expected error was not thrown");
       } catch (error) {
         expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain("Product with ID non-existent not found");
+        expect((error as Error).message).toContain(
+          "Product with ID non-existent not found",
+        );
       }
 
       expect(productRepository.findById).toHaveBeenCalledWith("non-existent");

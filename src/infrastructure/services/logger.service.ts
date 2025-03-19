@@ -1,5 +1,5 @@
-import { Injectable, LoggerService as NestLoggerService } from '@nestjs/common';
-import * as winston from 'winston';
+import { Injectable, LoggerService as NestLoggerService } from "@nestjs/common";
+import * as winston from "winston";
 
 interface RequestLog {
   method: string;
@@ -14,21 +14,21 @@ export class LoggerService implements NestLoggerService {
 
   constructor() {
     this.logger = winston.createLogger({
-      level: 'info',
+      level: "info",
       format: winston.format.combine(
         winston.format.timestamp(),
-        winston.format.json()
+        winston.format.json(),
       ),
       transports: [
-        new winston.transports.File({ filename: 'error.log', level: 'error' }),
-        new winston.transports.File({ filename: 'combined.log' }),
+        new winston.transports.File({ filename: "error.log", level: "error" }),
+        new winston.transports.File({ filename: "combined.log" }),
         new winston.transports.Console({
           format: winston.format.combine(
             winston.format.colorize(),
-            winston.format.simple()
-          )
-        })
-      ]
+            winston.format.simple(),
+          ),
+        }),
+      ],
     });
   }
 
@@ -40,7 +40,7 @@ export class LoggerService implements NestLoggerService {
     this.logger.error(message, {
       context,
       trace,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -61,21 +61,21 @@ export class LoggerService implements NestLoggerService {
   }
 
   logHttpRequest(request: RequestLog, response: any, duration: number): void {
-    this.logger.info('HTTP Request', {
+    this.logger.info("HTTP Request", {
       method: request.method,
       url: request.url,
       statusCode: response.statusCode || request.statusCode,
       ip: request.ip,
       duration,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
   }
 
   logDatabaseQuery(query: string, duration: number, context?: string) {
-    this.logger.debug('Database Query', {
+    this.logger.debug("Database Query", {
       query,
       duration: `${duration}ms`,
-      context
+      context,
     });
   }
 
@@ -85,21 +85,21 @@ export class LoggerService implements NestLoggerService {
       url: request.url,
       statusCode: request.statusCode,
       ip: request.ip,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
   }
 
   logInfo(message: string): void {
     this.logger.info({
       message,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
   }
 
   logWarning(message: string): void {
     this.logger.warn({
       message,
-      timestamp: new Date()
+      timestamp: new Date(),
     });
   }
 }

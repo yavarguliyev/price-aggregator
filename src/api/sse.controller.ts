@@ -1,36 +1,49 @@
-import { Controller, Get, Sse } from '@nestjs/common';
-import { Observable, interval } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
-import { Public } from '../core/auth/public.decorator';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { AggregatorService } from '../application/services/aggregator.service';
-import * as fs from 'fs';
-import * as path from 'path';
+import { Controller, Get, Sse } from "@nestjs/common";
+import { Observable, interval } from "rxjs";
+import { map, switchMap } from "rxjs/operators";
+import { Public } from "../core/auth/public.decorator";
+import { ApiTags, ApiOperation } from "@nestjs/swagger";
+import { AggregatorService } from "../application/services/aggregator.service";
+import * as fs from "fs";
+import * as path from "path";
 
-@Controller('visualize')
-@ApiTags('Real-time Visualization')
+@Controller("visualize")
+@ApiTags("Real-time Visualization")
 @Public()
 export class SseController {
   constructor(private readonly aggregatorService: AggregatorService) {}
 
   @Get()
   getVisualizationPage() {
-    const htmlPath = path.join(__dirname, '..', '..', 'public', 'visualization.html');
+    const htmlPath = path.join(
+      __dirname,
+      "..",
+      "..",
+      "public",
+      "visualization.html",
+    );
     if (fs.existsSync(htmlPath)) {
-      return fs.readFileSync(htmlPath, 'utf8');
+      return fs.readFileSync(htmlPath, "utf8");
     } else {
       return this.getDefaultHtml();
     }
   }
 
-  @Sse('events')
-  @ApiOperation({ summary: 'Server-Sent Events endpoint for real-time updates' })
+  @Sse("events")
+  @ApiOperation({
+    summary: "Server-Sent Events endpoint for real-time updates",
+  })
   sse(): Observable<MessageEvent> {
     return interval(2000).pipe(
       switchMap(() => this.aggregatorService.getAllProducts()),
       map((response) => {
-        const responseData = typeof response === 'object' && response !== null ? response : { data: [] };
-        const data = JSON.stringify('data' in responseData ? responseData.data : []);
+        const responseData =
+          typeof response === "object" && response !== null
+            ? response
+            : { data: [] };
+        const data = JSON.stringify(
+          "data" in responseData ? responseData.data : [],
+        );
         return { data } as MessageEvent;
       }),
     );
@@ -102,7 +115,9 @@ export class SseController {
       </html>
       `;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);  html = `<html><body><p>Error loading visualization: ${errorMessage}</p></body></html>`;
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      html = `<html><body><p>Error loading visualization: ${errorMessage}</p></body></html>`;
     }
 
     return html;

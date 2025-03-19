@@ -1,11 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ProviderOneService } from '../../infrastructure/services/provider-one.service';
-import { ProviderTwoService } from '../../infrastructure/services/provider-two.service';
-import { ProviderThreeService } from '../../infrastructure/services/provider-three.service';
-import { ProductRepository } from '../../infrastructure/persistence/product.repository';
-import { ProviderProduct } from '../../domain/entities/product.model';
+import { Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { EventEmitter2 } from "@nestjs/event-emitter";
+import { ProviderOneService } from "../../infrastructure/services/provider-one.service";
+import { ProviderTwoService } from "../../infrastructure/services/provider-two.service";
+import { ProviderThreeService } from "../../infrastructure/services/provider-three.service";
+import { ProviderFourService } from "../../infrastructure/services/provider-four.service";
+import { ProductRepository } from "../../infrastructure/persistence/product.repository";
+import { ProviderProduct } from "../../domain/entities/product.model";
+import { handleError } from "../../core/utils/error-handler.util";
 
 @Injectable()
 export class ProviderService {
@@ -17,11 +19,15 @@ export class ProviderService {
     private readonly providerOneService: ProviderOneService,
     private readonly providerTwoService: ProviderTwoService,
     private readonly providerThreeService: ProviderThreeService,
+    private readonly providerFourService: ProviderFourService,
     private readonly productRepository: ProductRepository,
     private readonly configService: ConfigService,
     private readonly eventEmitter: EventEmitter2,
   ) {
-    this.fetchInterval = this.configService.get<number>('FETCH_INTERVAL', 10000);
+    this.fetchInterval = this.configService.get<number>(
+      "FETCH_INTERVAL",
+      10000,
+    );
     this.logger.log(`Fetch interval set to ${this.fetchInterval}ms`);
   }
 
@@ -30,7 +36,7 @@ export class ProviderService {
       this.stopFetchingData();
     }
 
-    this.logger.log('Starting periodic data fetching');
+    this.logger.log("Starting periodic data fetching");
     void this.fetchAllProviders();
 
     this.intervalId = setInterval(() => {
@@ -42,49 +48,71 @@ export class ProviderService {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       delete this.intervalId;
-      this.logger.log('Data fetching interval cleared');
+      this.logger.log("Data fetching interval cleared");
     }
   }
 
-  async fetchAllProviders() {
+  async fetchAllProviders(): Promise<void> {
     try {
-      const [provider1Products, provider2Products, provider3Products] = await Promise.all([
-        this.providerOneService.getProducts(),
-        this.providerTwoService.getProducts(),
-        this.providerThreeService.getProducts()
-      ]);
-
       await Promise.all([
-        this.fetchAndSaveProviderData('provider-one', provider1Products),
-        this.fetchAndSaveProviderData('provider-two', provider2Products),
-        this.fetchAndSaveProviderData('provider-three', provider3Products)
+        this.fetchProviderData(this.providerOneService),
+        this.fetchProviderData(this.providerTwoService),
+        this.fetchProviderData(this.providerThreeService),
+        this.fetchProviderData(this.providerFourService),
       ]);
-
-      this.logger.log('Successfully fetched data from all providers');
-      this.eventEmitter.emit('providers.fetched', { timestamp: new Date() });
     } catch (error) {
-      this.handleError(error, 'fetchAllProviders');
+      handleError(error, "fetchAllProviders");
     }
   }
 
-  private async fetchAndSaveProviderData(providerName: string, products: ProviderProduct[]) {
+  private async fetchProviderData(providerService: any) {
     try {
-      this.logger.debug(`Fetched ${products.length} products from ${providerName}`);
+      const products = await providerService.getProducts();
+      await this.fetchAndSaveProviderData(
+        providerService.constructor.name,
+        products,
+      );
+    } catch (error) {
+      handleError(
+        error,
+        `fetchProviderData for ${providerService.constructor.name}`,
+      );
+    }
+  }
+
+  private async fetchAndSaveProviderData(
+    provider: string,
+    products: ProviderProduct[],
+  ) {
+    try {
+      this.logger.debug(
+        `Fetched ${products.length} products from ${provider}`,
+      );
 
       for (const product of products) {
-        await this.productRepository.createOrUpdateProduct(providerName, product);
+        await this.productRepository.createOrUpdateProduct(
+          provider,
+          product,
+        );
       }
 
-      this.logger.debug(`Saved ${products.length} products from ${providerName}`);
+      this.logger.debug(
+        `Saved ${products.length} products from ${provider}`,
+      );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Error processing data from ${providerName}: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+      this.logger.error(
+        `Error processing data from ${provider}: ${errorMessage}`,
+      );
       throw error;
     }
   }
 
   async getChanges(timeframe?: number) {
-    const timeLimit = timeframe ? new Date(Date.now() - timeframe * 60 * 1000) : new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const timeLimit = timeframe
+      ? new Date(Date.now() - timeframe * 60 * 1000)
+      : new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const [priceChanges, availabilityChanges] = await Promise.all([
       this.productRepository.findPriceChanges(timeLimit),
@@ -94,10 +122,10 @@ export class ProviderService {
     const priceChangeResult = priceChanges.map((price) => ({
       id: price.product.id,
       name: price.product.name,
-      provider: price.product.providerName,
+      provider: price.product.provider,
       providerId: price.product.providerId,
-      changeType: 'price',
-      newValue: price.value,
+      changeType: "price",
+      newValue: price.amount,
       currency: price.currency,
       timestamp: price.createdAt,
     }));
@@ -106,24 +134,18 @@ export class ProviderService {
       (availability) => ({
         id: availability.product.id,
         name: availability.product.name,
-        provider: availability.product.providerName,
+        provider: availability.product.provider,
         providerId: availability.product.providerId,
-        changeType: 'availability',
+        changeType: "availability",
         newValue: availability.isAvailable,
         timestamp: availability.createdAt,
       }),
     );
 
-    const allChanges = [...priceChangeResult, ...availabilityChangeResult].sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    const allChanges = [...priceChangeResult, ...availabilityChangeResult].sort(
+      (a, b) => b.timestamp.getTime() - a.timestamp.getTime(),
+    );
 
     return allChanges;
-  }
-
-  private handleError(error: unknown, context: string): never {
-    if (error instanceof Error) {
-      throw new Error(`Error in ${context}: ${error.message}`);
-    }
-
-    throw new Error(`Unknown error in ${context}`);
   }
 }

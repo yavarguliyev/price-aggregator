@@ -12,6 +12,10 @@ A NestJS application that aggregates pricing and availability data for digital p
 - Rate limiting
 - Health monitoring
 - Docker support for easy deployment
+- Price history tracking with timestamps
+- Stale data detection and marking
+- Efficient data normalization from various providers
+- Concurrent data fetching with resilience patterns
 
 ## Tech Stack
 
@@ -47,22 +51,44 @@ npm install
 cp .env.example .env
 ```
 
-4. Start the database services (PostgreSQL and Redis):
-```bash
-npm run docker:db
-```
+4. Choose one of the following deployment options:
 
-5. Apply database migrations:
-```bash
-npm run prisma:migrate
-```
+The application uses a deployment script with various options:
 
-6. Start the application:
 ```bash
-npm run start:dev
-```
+# Start only database services (PostgreSQL + Redis)
+./deployment/deploy.sh --dev
 
-The application will be available at http://localhost:3000
+# Start the full application stack in production mode
+./deployment/deploy.sh --prod
+
+# Build containers with latest changes
+./deployment/deploy.sh --prod --build
+
+# Stop all containers
+./deployment/deploy.sh --down
+
+# View container logs
+./deployment/deploy.sh --logs
+
+# Check container status
+./deployment/deploy.sh --status
+
+# Restart containers
+./deployment/deploy.sh --restart
+
+# Clean up containers, images, and volumes
+./deployment/deploy.sh --clean
+
+# Remove unused Docker resources
+./deployment/deploy.sh --prune
+
+# Create a new database migration
+./deployment/deploy.sh --migrate <migration_name>
+
+# Skip database migrations during deployment
+./deployment/deploy.sh --prod --skip-migrations
+```
 
 ## Project Structure
 
@@ -72,9 +98,9 @@ The project follows Clean Architecture principles:
 src/
 ├── api/              # API layer (controllers, routes)
 ├── application/      # Application layer (use cases, services)
-├── core/            # Core layer (interfaces, shared code)
-├── domain/          # Domain layer (entities, value objects)
-└── infrastructure/  # Infrastructure layer (repositories, external services)
+├── core/             # Core layer (interfaces, shared code)
+├── domain/           # Domain layer (entities, value objects)
+└── infrastructure/   # Infrastructure layer (repositories, external services)
 ```
 
 ## API Endpoints
@@ -95,10 +121,10 @@ Query Parameters:
   - minPrice: number (optional) - Minimum price filter
   - maxPrice: number (optional) - Maximum price filter
   - availability: boolean (optional) - Filter by availability
-  - provider: string (optional) - Filter by provider name
-  - page: number (optional) - Page number (default: 1)
-  - limit: number (optional) - Items per page (default: 10)
+  - provider: string (optional) - Filter by provider
   - includeStale: boolean (optional) - Include stale products
+  - page: number (optional) - Page number for pagination
+  - limit: number (optional) - Items per page
 
 # Get product by ID
 GET /api/products/:id
@@ -106,22 +132,34 @@ GET /api/products/:id
 # Get products with changes
 GET /api/products/changes
 Query Parameters:
-  - timeframe: number (optional) - Time window in minutes (default: 60)
+  - timeframe: number (optional) - Time window in minutes (default: 1440)
 
 # Get stale products
 GET /api/products/stale
 ```
 
-#### Provider Simulators
+#### Provider Endpoints (Simulated External APIs)
 ```http
 # Provider One products
-GET /api/provider-one/products
+GET /api/provider-one
 
 # Provider Two products
-GET /api/provider-two/products
+GET /api/provider-two
 
 # Provider Three products
-GET /api/provider-three/products
+GET /api/provider-three
+
+# Provider Four products
+GET /api/provider-four
+```
+
+#### Data Visualization
+```http
+# View real-time product changes
+GET /api/visualize
+
+# SSE endpoint for real-time updates
+GET /api/visualize/events
 ```
 
 #### Health & Documentation
@@ -131,19 +169,11 @@ GET /api/health
 
 # Swagger documentation
 GET /api-docs
-
-# Real-time visualization
-GET /visualize
 ```
 
-## Docker Commands
-
-The application includes convenient npm scripts for Docker operations:
+## Database Management
 
 ```bash
-# Start database services (PostgreSQL + Redis)
-npm run docker:db
-
 # View database UI
 npm run prisma:studio
 
@@ -152,7 +182,27 @@ npm run prisma:generate
 
 # Apply database migrations
 npm run prisma:migrate
+
+# Create a new migration
+npx prisma migrate dev --name <migration_name>
 ```
+
+## Architecture
+
+This application implements:
+
+1. **Clean Architecture**: Separation of concerns with distinct layers (domain, application, infrastructure)
+2. **Repository Pattern**: Abstracting data access behind repository interfaces
+3. **Dependency Injection**: NestJS's built-in DI container for managing dependencies
+4. **Event-Driven Architecture**: Using NestJS event emitter for real-time updates
+5. **Resilience Patterns**: Error handling, retries, and graceful degradation
+
+### Data Flow
+
+1. Provider Simulator Services: Simulate external provider APIs with random product data
+2. Provider Service: Fetches data from all providers concurrently at configurable intervals
+3. Product Repository: Normalizes and stores product data, tracking price and availability history
+4. Aggregator Service: Presents unified product data to API consumers
 
 ## Development
 
@@ -199,6 +249,24 @@ STALENESS_THRESHOLD=60000
 ```
 
 **Note**: The `.env` file is excluded from Git in `.gitignore` to prevent committing sensitive information.
+
+## Error Handling and Resilience
+
+The application implements the following resilience patterns:
+
+1. **Automatic Retries**: Failed provider requests are retried with exponential backoff
+2. **Circuit Breaker**: Prevents cascading failures when a provider is consistently failing
+3. **Fallbacks**: Default values are used when provider data is unavailable
+4. **Graceful Degradation**: The system continues to operate (with reduced functionality) when some providers are down
+5. **Comprehensive Logging**: Detailed logs for debugging and monitoring
+
+## Performance Optimization
+
+1. **Concurrent Processing**: All provider requests are executed in parallel
+2. **Caching**: Frequently accessed data is cached in Redis
+3. **Database Indexing**: Appropriate indexes for efficient querying
+4. **Query Optimization**: Efficient database queries with proper joining and filtering
+5. **Rate Limiting**: Protection against excessive API usage
 
 ## License
 

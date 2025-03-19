@@ -1,68 +1,60 @@
-import { Injectable } from '@nestjs/common';
-import { ProviderProduct } from '../../domain/entities/product.model';
+import { Injectable } from "@nestjs/common";
+import { BaseProviderService } from "./base-provider.service";
+import { ProviderProduct } from "../../domain/entities/product.model";
 
 @Injectable()
-export class ProviderTwoService {
-  private products: ProviderProduct[] = [];
-  private readonly updateInterval = 7000;
+export class ProviderTwoService extends BaseProviderService {
+  protected readonly updateInterval = 20000;
+  protected readonly provider = "provider-two";
 
-  constructor() {
-    this.initializeProducts();
-    this.startUpdating();
-  }
-
-  private initializeProducts(): void {
+  protected initializeProducts(): void {
     this.products = [
       {
-        id: 'book-123',
-        name: 'JavaScript: The Good Parts',
-        description: 'Learn JavaScript best practices',
+        id: "book-123",
+        name: "JavaScript: The Good Parts",
+        description: "Learn JavaScript best practices",
         price: 29.99,
-        currency: 'EUR',
+        currency: "EUR",
         availability: true,
         isAvailable: true,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
       {
-        id: 'book-124',
-        name: 'Machine Learning for Beginners',
-        description: 'Gentle introduction to machine learning concepts',
+        id: "book-124",
+        name: "Machine Learning for Beginners",
+        description: "Gentle introduction to machine learning concepts",
         price: 39.99,
-        currency: 'EUR',
+        currency: "EUR",
         availability: true,
         isAvailable: true,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
       {
-        id: 'book-125',
-        name: 'Cloud Computing Essentials',
-        description: 'Learn cloud computing from scratch',
+        id: "book-125",
+        name: "Cloud Computing Essentials",
+        description: "Learn cloud computing from scratch",
         price: 49.99,
-        currency: 'EUR',
+        currency: "EUR",
         availability: true,
         isAvailable: true,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
       {
-        id: 'book-126',
-        name: 'Blockchain Development',
-        description: 'Create your own blockchain applications',
+        id: "book-126",
+        name: "Blockchain Development",
+        description: "Create your own blockchain applications",
         price: 59.99,
-        currency: 'EUR',
+        currency: "EUR",
         availability: true,
         isAvailable: true,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
     ];
   }
 
-  private startUpdating(): void {
-    setInterval(() => {
-      this.updateRandomProduct();
-    }, this.updateInterval);
-  }
+  protected updateRandomProduct(): void {
+    if (this.products.length === 0) return;
 
-  private updateRandomProduct(): void {
     const randomIndex = Math.floor(Math.random() * this.products.length);
     const product = this.products[randomIndex];
 

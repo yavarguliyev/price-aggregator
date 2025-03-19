@@ -1,58 +1,48 @@
-import { Injectable } from '@nestjs/common';
-import { ProviderProduct } from '../../domain/entities/product.model';
+import { Injectable } from "@nestjs/common";
+import { ProviderProduct } from "../../domain/entities/product.model";
+import { BaseProviderService } from "./base-provider.service";
 
 @Injectable()
-export class ProviderOneService {
-  private products: ProviderProduct[] = [];
-  private readonly updateInterval = 5000;
+export class ProviderOneService extends BaseProviderService {
+  protected readonly updateInterval = 15000;
+  protected readonly provider = "provider-one";
 
-  constructor() {
-    this.initializeProducts();
-    this.startUpdating();
-  }
-
-  private initializeProducts(): void {
+  protected initializeProducts(): void {
     this.products = [
       {
-        id: 'p1-001',
-        name: 'Introduction to TypeScript',
-        description: 'Learn the basics of TypeScript programming',
+        id: "p1-001",
+        name: "Introduction to TypeScript",
+        description: "Learn the basics of TypeScript programming",
         price: 29.99,
-        currency: 'USD',
+        currency: "USD",
         availability: true,
         isAvailable: true,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
       {
-        id: 'p1-002',
-        name: 'Advanced React Patterns',
-        description: 'Master React with advanced design patterns',
+        id: "p1-002",
+        name: "Advanced React Patterns",
+        description: "Master React with advanced design patterns",
         price: 49.99,
-        currency: 'USD',
+        currency: "USD",
         availability: false,
         isAvailable: false,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
       {
-        id: 'p1-003',
-        name: 'NestJS for Professionals',
-        description: 'Build scalable Node.js applications with NestJS',
+        id: "p1-003",
+        name: "NestJS for Professionals",
+        description: "Build scalable Node.js applications with NestJS",
         price: 39.99,
-        currency: 'USD',
+        currency: "USD",
         availability: true,
         isAvailable: true,
-        lastUpdated: new Date()
+        lastUpdated: new Date(),
       },
     ];
   }
 
-  private startUpdating(): void {
-    setInterval(() => {
-      this.updateRandomProduct();
-    }, this.updateInterval);
-  }
-
-  private updateRandomProduct(): void {
+  protected updateRandomProduct(): void {
     const randomIndex = Math.floor(Math.random() * this.products.length);
     const product = this.products[randomIndex];
 

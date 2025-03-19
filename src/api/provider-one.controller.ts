@@ -1,14 +1,10 @@
-import { Controller, Get } from '@nestjs/common';
-import { ProviderOneService } from '../infrastructure/services/provider-one.service';
-import { Public } from '../core/auth/public.decorator';
+import { Controller } from "@nestjs/common";
+import { ProviderOneService } from "../infrastructure/services/provider-one.service";
+import { BaseProviderController } from "./base-provider.controller";
 
-@Controller('provider-one')
-export class ProviderOneController {
-  constructor(private readonly providerOneService: ProviderOneService) {}
-
-  @Get()
-  @Public()
-  getProducts() {
-    return this.providerOneService.getProducts();
+@Controller("provider-one")
+export class ProviderOneController extends BaseProviderController {
+  constructor(protected readonly providerService: ProviderOneService) {
+    super();
   }
 }

@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { ProductRepository } from '../../core/interfaces/repositories/product-repository.interface';
+import { Injectable } from "@nestjs/common";
+import { ProductRepository } from "../../core/interfaces/repositories/product-repository.interface";
 
 @Injectable()
 export class GetProductByIdUseCase {

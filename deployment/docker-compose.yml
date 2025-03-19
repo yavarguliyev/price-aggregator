@@ -35,7 +35,7 @@ services:
 
   api:
     build:
-      context: .
+      context: ../
       dockerfile: Dockerfile
     container_name: price-aggregator-api
     restart: always

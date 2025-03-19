@@ -1,17 +1,17 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get } from "@nestjs/common";
 import {
   HealthCheck,
   HealthCheckService,
   DiskHealthIndicator,
   MemoryHealthIndicator,
-  PrismaHealthIndicator
-} from '@nestjs/terminus';
-import { Public } from '../core/auth/public.decorator';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { PrismaService } from '../infrastructure/persistence/prisma/prisma.service';
+  PrismaHealthIndicator,
+} from "@nestjs/terminus";
+import { Public } from "../core/auth/public.decorator";
+import { ApiTags, ApiOperation, ApiResponse } from "@nestjs/swagger";
+import { PrismaService } from "../infrastructure/persistence/prisma/prisma.service";
 
-@ApiTags('Health')
-@Controller('health')
+@ApiTags("Health")
+@Controller("health")
 @Public()
 export class HealthController {
   constructor(
@@ -24,14 +24,15 @@ export class HealthController {
 
   @Get()
   @HealthCheck()
-  @ApiOperation({ summary: 'Check overall application health' })
-  @ApiResponse({ status: 200, description: 'The application is healthy' })
-  @ApiResponse({ status: 503, description: 'The application is not healthy' })
+  @ApiOperation({ summary: "Check overall application health" })
+  @ApiResponse({ status: 200, description: "The application is healthy" })
+  @ApiResponse({ status: 503, description: "The application is not healthy" })
   async check() {
     return this.health.check([
-      () => this.prismaHealth.pingCheck('database', this.prismaService),
-      () => this.disk.checkStorage('storage', { path: '/', thresholdPercent: 0.9 }),
-      () => this.memory.checkHeap('memory_heap', 300 * 1024 * 1024)
+      () => this.prismaHealth.pingCheck("database", this.prismaService),
+      () =>
+        this.disk.checkStorage("storage", { path: "/", thresholdPercent: 0.9 }),
+      () => this.memory.checkHeap("memory_heap", 300 * 1024 * 1024),
     ]);
   }
 }

@@ -1,37 +1,37 @@
-import { Test, TestingModule } from '@nestjs/testing';
-import { SseController } from '../../src/api/sse.controller';
-import { AggregatorService } from '../../src/application/services/aggregator.service';
-import { Observable } from 'rxjs';
-import * as fs from 'fs';
+import { Test, TestingModule } from "@nestjs/testing";
+import { SseController } from "../../src/api/sse.controller";
+import { AggregatorService } from "../../src/application/services/aggregator.service";
+import { Observable } from "rxjs";
+import * as fs from "fs";
 
-jest.mock('fs');
+jest.mock("fs");
 
-describe('SseController', () => {
+describe("SseController", () => {
   let controller: SseController;
 
   const mockAggregatorService = {
     getAllProducts: jest.fn().mockResolvedValue({
       data: [
         {
-          id: '1',
-          name: 'Test Product 1',
+          id: "1",
+          name: "Test Product 1",
           price: 100,
-          currency: 'USD',
+          currency: "USD",
           isAvailable: true,
-          provider: 'provider-one',
-          updatedAt: new Date().toISOString()
+          provider: "provider-one",
+          updatedAt: new Date().toISOString(),
         },
         {
-          id: '2',
-          name: 'Test Product 2',
+          id: "2",
+          name: "Test Product 2",
           price: 200,
-          currency: 'USD',
+          currency: "USD",
           isAvailable: false,
-          provider: 'provider-two',
-          updatedAt: new Date().toISOString()
-        }
-      ]
-    })
+          provider: "provider-two",
+          updatedAt: new Date().toISOString(),
+        },
+      ],
+    }),
   };
 
   beforeEach(async () => {
@@ -42,9 +42,9 @@ describe('SseController', () => {
       providers: [
         {
           provide: AggregatorService,
-          useValue: mockAggregatorService
-        }
-      ]
+          useValue: mockAggregatorService,
+        },
+      ],
     }).compile();
 
     controller = module.get<SseController>(SseController);

@@ -38,10 +38,3 @@ The deployment script provides various options for managing the application:
 # Stop all containers
 ./deployment/deploy.sh --down
 ```
-
-You can also use the npm script for starting the database services:
-
-```bash
-# This runs ./deployment/deploy.sh --dev
-npm run docker:db
-``` 
