@@ -15,15 +15,20 @@ datasource db {
 
 // Product model to store aggregated product data
 model Product {
-  id          String    @id @default(uuid())
-  name        String
-  description String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  providerId  String    // Original ID from the provider
-  providerName String    // Name of the provider
-  prices      Price[]
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  lastFetchedAt DateTime     @default(now()) // When the product was last successfully fetched from provider
+  isStale      Boolean       @default(false) // Flag to indicate if data is considered stale
+  providerId   String        // Original ID from the provider
+  providerName String        // Name of the provider
+  prices       Price[]
   availability Availability[]
+
+  @@index([providerName, providerId]) // Index for faster provider queries
+  @@index([isStale]) // Index for faster stale data queries
 }
 
 // Price model to track price history
@@ -34,6 +39,8 @@ model Price {
   createdAt   DateTime  @default(now())
   product     Product   @relation(fields: [productId], references: [id])
   productId   String
+
+  @@index([productId, createdAt]) // Index for faster price history queries
 }
 
 // Availability model to track availability history
@@ -43,4 +50,6 @@ model Availability {
   createdAt   DateTime  @default(now())
   product     Product   @relation(fields: [productId], references: [id])
   productId   String
+
+  @@index([productId, createdAt]) // Index for faster availability history queries
 }

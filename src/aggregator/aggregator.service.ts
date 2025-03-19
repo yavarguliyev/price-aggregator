@@ -10,7 +10,9 @@ import { Availability, Price, Product } from '@prisma/client';
 export class AggregatorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AggregatorService.name);
   private readonly fetchInterval = 10000; // 10 seconds
+  private readonly stalenessThreshold = 30000; // 30 seconds - threshold for marking data as stale
   private intervalId: NodeJS.Timeout | null = null;
+  private stalenessCheckIntervalId: NodeJS.Timeout | null = null;
   
   constructor(
     private readonly prisma: PrismaService,
@@ -28,18 +30,33 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       await this.fetchAllProviders();
     }, this.fetchInterval);
     
+    // Set up interval for staleness checking
+    this.stalenessCheckIntervalId = setInterval(async () => {
+      await this.checkAndMarkStaleProducts();
+    }, this.fetchInterval * 2); // Check less frequently than fetching
+    
     // Prevent keeping Node process alive
     if (this.intervalId.unref) {
       this.intervalId.unref();
     }
+    
+    if (this.stalenessCheckIntervalId.unref) {
+      this.stalenessCheckIntervalId.unref();
+    }
   }
   
   onModuleDestroy() {
-    // Clean up the interval when the module is destroyed
+    // Clean up the intervals when the module is destroyed
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
       this.logger.log('Data fetching interval cleared');
+    }
+    
+    if (this.stalenessCheckIntervalId) {
+      clearInterval(this.stalenessCheckIntervalId);
+      this.stalenessCheckIntervalId = null;
+      this.logger.log('Staleness check interval cleared');
     }
   }
 
@@ -58,9 +75,24 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async fetchAndSaveProviderData(providerName: string, products: ProviderProduct[]) {
+    // Keep track of all products from this provider to mark stale ones later
+    const fetchedProductIds = products.map(p => p.id);
+    
     for (const product of products) {
       await this.saveProduct(providerName, product);
     }
+    
+    // Update products from this provider that were not in this fetch
+    await this.prisma.product.updateMany({
+      where: {
+        providerName: providerName,
+        providerId: { notIn: fetchedProductIds },
+        isStale: false
+      },
+      data: {
+        isStale: true
+      }
+    });
   }
 
   private async saveProduct(providerName: string, providerProduct: ProviderProduct) {
@@ -83,6 +115,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
             name: providerProduct.name,
             description: providerProduct.description,
             updatedAt: new Date(),
+            lastFetchedAt: new Date(),
+            isStale: false, // Reset stale flag since we just fetched it
           },
         });
       } else {
@@ -93,6 +127,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
             description: providerProduct.description,
             providerId: providerProduct.id,
             providerName: providerName,
+            lastFetchedAt: new Date(),
+            isStale: false,
           },
         });
       }
@@ -134,6 +170,62 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
   }
+  
+  // Periodically check for products that haven't been updated recently and mark them as stale
+  async checkAndMarkStaleProducts() {
+    const staleThresholdTime = new Date(Date.now() - this.stalenessThreshold);
+    
+    try {
+      const result = await this.prisma.product.updateMany({
+        where: {
+          lastFetchedAt: { lt: staleThresholdTime },
+          isStale: false
+        },
+        data: {
+          isStale: true
+        }
+      });
+      
+      if (result.count > 0) {
+        this.logger.log(`Marked ${result.count} products as stale`);
+      }
+    } catch (error) {
+      this.logger.error(`Error checking for stale products: ${error.message}`);
+    }
+  }
+
+  // Get all products that are marked as stale
+  async getStaleProducts() {
+    const staleProducts = await this.prisma.product.findMany({
+      where: {
+        isStale: true
+      },
+      include: {
+        prices: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+        availability: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    return staleProducts.map(product => ({
+      id: product.id,
+      name: product.name,
+      description: product.description,
+      provider: product.providerName,
+      providerId: product.providerId,
+      price: product.prices[0]?.value,
+      currency: product.prices[0]?.currency,
+      isAvailable: product.availability[0]?.isAvailable,
+      isStale: product.isStale,
+      lastFetchedAt: product.lastFetchedAt,
+      updatedAt: product.updatedAt,
+    }));
+  }
 
   async getAllProducts(filters?: {
     name?: string;
@@ -141,11 +233,13 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     maxPrice?: number;
     availability?: boolean;
     provider?: string;
+    includeStale?: boolean;
   }) {
     const products = await this.prisma.product.findMany({
       where: {
         ...(filters?.name && { name: { contains: filters.name, mode: 'insensitive' } }),
         ...(filters?.provider && { providerName: filters.provider }),
+        ...(!filters?.includeStale && { isStale: false }), // By default, exclude stale products
       },
       include: {
         prices: {
@@ -179,6 +273,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
         price: product.prices[0]?.value,
         currency: product.prices[0]?.currency,
         isAvailable: product.availability[0]?.isAvailable,
+        isStale: product.isStale,
+        lastFetchedAt: product.lastFetchedAt,
         updatedAt: product.updatedAt,
       }));
   }
@@ -213,6 +309,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
         timestamp: price.createdAt,
       })),
       isAvailable: product.availability[0]?.isAvailable,
+      isStale: product.isStale,
+      lastFetchedAt: product.lastFetchedAt,
       updatedAt: product.updatedAt,
     };
   }
