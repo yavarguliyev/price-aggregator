@@ -1,85 +1,84 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { AggregatorController } from "../../src/api/aggregator.controller";
-import { AggregatorService } from "../../src/application/services/aggregator.service";
-import { CACHE_MANAGER } from "@nestjs/cache-manager";
-import { CacheModule } from "@nestjs/cache-manager";
+import { Test, TestingModule } from '@nestjs/testing';
+import { AggregatorController } from '../../src/api/aggregator.controller';
+import { AggregatorService } from '../../src/application/services/aggregator.service';
+import { CacheModule } from '@nestjs/cache-manager';
 
-describe("AggregatorController", () => {
+describe('AggregatorController', () => {
   let controller: AggregatorController;
   let service: AggregatorService;
 
   const mockProducts = [
     {
-      id: "1",
-      name: "Test Product 1",
-      description: "Test description 1",
+      id: '1',
+      name: 'Test Product 1',
+      description: 'Test description 1',
       price: 100,
-      currency: "USD",
+      currency: 'USD',
       isAvailable: true,
-      provider: "provider-one",
-      updatedAt: new Date().toISOString(),
+      provider: 'provider-one',
+      updatedAt: new Date().toISOString()
     },
     {
-      id: "2",
-      name: "Test Product 2",
-      description: "Test description 2",
+      id: '2',
+      name: 'Test Product 2',
+      description: 'Test description 2',
       price: 200,
-      currency: "USD",
+      currency: 'USD',
       isAvailable: false,
-      provider: "provider-two",
-      updatedAt: new Date().toISOString(),
-    },
+      provider: 'provider-two',
+      updatedAt: new Date().toISOString()
+    }
   ];
 
   const mockProduct = {
-    id: "1",
-    name: "Test Product 1",
-    description: "Test description 1",
-    provider: "provider-one",
-    providerId: "product-1",
+    id: '1',
+    name: 'Test Product 1',
+    description: 'Test description 1',
+    provider: 'provider-one',
+    providerId: 'product-1',
     priceHistory: [
       {
         value: 100,
-        currency: "USD",
-        timestamp: new Date().toISOString(),
+        currency: 'USD',
+        timestamp: new Date().toISOString()
       },
       {
         value: 90,
-        currency: "USD",
-        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-      },
+        currency: 'USD',
+        timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      }
     ],
     isAvailable: true,
-    updatedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   };
 
   const mockChanges = [
     {
-      id: "1",
-      name: "Test Product 1",
-      description: "Test description 1",
-      provider: "provider-one",
-      providerId: "product-1",
+      id: '1',
+      name: 'Test Product 1',
+      description: 'Test description 1',
+      provider: 'provider-one',
+      providerId: 'product-1',
       priceChanges: [
         {
           value: 100,
-          currency: "USD",
-          timestamp: new Date().toISOString(),
-        },
+          currency: 'USD',
+          timestamp: new Date().toISOString()
+        }
       ],
       availabilityChanges: [
         {
           isAvailable: true,
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    },
+          timestamp: new Date().toISOString()
+        }
+      ]
+    }
   ];
 
   const mockAggregatorService = {
     getAllProducts: jest.fn().mockResolvedValue(mockProducts),
     getProductById: jest.fn().mockResolvedValue(mockProduct),
-    getChanges: jest.fn().mockResolvedValue(mockChanges),
+    getChanges: jest.fn().mockResolvedValue(mockChanges)
   };
 
   beforeEach(async () => {
@@ -91,9 +90,9 @@ describe("AggregatorController", () => {
       providers: [
         {
           provide: AggregatorService,
-          useValue: mockAggregatorService,
-        },
-      ],
+          useValue: mockAggregatorService
+        }
+      ]
     }).compile();
 
     controller = module.get<AggregatorController>(AggregatorController);
@@ -104,24 +103,24 @@ describe("AggregatorController", () => {
     jest.restoreAllMocks();
   });
 
-  it("should be defined", () => {
+  it('should be defined', () => {
     expect(controller).toBeDefined();
   });
 
-  describe("getAllProducts", () => {
-    it("should return all products", async () => {
+  describe('getAllProducts', () => {
+    it('should return all products', async () => {
       const result = await controller.getAllProducts();
 
       expect(result).toEqual(mockProducts);
       expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({
         page: 1,
         limit: 10,
-        includeStale: false,
+        includeStale: false
       });
     });
 
-    it("should apply name filter", async () => {
-      const name = "Test";
+    it('should apply name filter', async () => {
+      const name = 'Test';
       const result = await controller.getAllProducts(name);
 
       expect(result).toEqual(mockProducts);
@@ -129,17 +128,17 @@ describe("AggregatorController", () => {
         name,
         page: 1,
         limit: 10,
-        includeStale: false,
+        includeStale: false
       });
     });
 
-    it("should apply price range filter", async () => {
+    it('should apply price range filter', async () => {
       const minPrice = 50;
       const maxPrice = 150;
       const result = await controller.getAllProducts(
         undefined,
         minPrice,
-        maxPrice,
+        maxPrice
       );
 
       expect(result).toEqual(mockProducts);
@@ -148,17 +147,17 @@ describe("AggregatorController", () => {
         maxPrice,
         page: 1,
         limit: 10,
-        includeStale: false,
+        includeStale: false
       });
     });
 
-    it("should apply availability filter", async () => {
+    it('should apply availability filter', async () => {
       const availability = true;
       const result = await controller.getAllProducts(
         undefined,
         undefined,
         undefined,
-        availability,
+        availability
       );
 
       expect(result).toEqual(mockProducts);
@@ -166,18 +165,18 @@ describe("AggregatorController", () => {
         availability,
         page: 1,
         limit: 10,
-        includeStale: false,
+        includeStale: false
       });
     });
 
-    it("should apply provider filter", async () => {
-      const provider = "provider-one";
+    it('should apply provider filter', async () => {
+      const provider = 'provider-one';
       const result = await controller.getAllProducts(
         undefined,
         undefined,
         undefined,
         undefined,
-        provider,
+        provider
       );
 
       expect(result).toEqual(mockProducts);
@@ -185,22 +184,22 @@ describe("AggregatorController", () => {
         provider,
         page: 1,
         limit: 10,
-        includeStale: false,
+        includeStale: false
       });
     });
 
-    it("should apply all filters", async () => {
-      const name = "Test";
+    it('should apply all filters', async () => {
+      const name = 'Test';
       const minPrice = 50;
       const maxPrice = 150;
       const availability = true;
-      const provider = "provider-one";
+      const provider = 'provider-one';
       const result = await controller.getAllProducts(
         name,
         minPrice,
         maxPrice,
         availability,
-        provider,
+        provider
       );
 
       expect(result).toEqual(mockProducts);
@@ -212,14 +211,14 @@ describe("AggregatorController", () => {
         provider,
         page: 1,
         limit: 10,
-        includeStale: false,
+        includeStale: false
       });
     });
   });
 
-  describe("getProductById", () => {
-    it("should return a product by ID", async () => {
-      const id = "1";
+  describe('getProductById', () => {
+    it('should return a product by ID', async () => {
+      const id = '1';
       const result = await controller.getProductById(id);
 
       expect(result).toEqual(mockProduct);
@@ -227,15 +226,15 @@ describe("AggregatorController", () => {
     });
   });
 
-  describe("getChanges", () => {
-    it("should return changes with default timeframe", async () => {
+  describe('getChanges', () => {
+    it('should return changes with default timeframe', async () => {
       const result = await controller.getChanges();
 
       expect(result).toEqual(mockChanges);
       expect(mockAggregatorService.getChanges).toHaveBeenCalledWith(undefined);
     });
 
-    it("should return changes with specified timeframe", async () => {
+    it('should return changes with specified timeframe', async () => {
       const timeframe = 24;
       const result = await controller.getChanges(timeframe);
 
