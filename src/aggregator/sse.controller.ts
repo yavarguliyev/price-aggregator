@@ -4,8 +4,10 @@ import { Observable, interval, map } from 'rxjs';
 import { AggregatorService } from './aggregator.service';
 import { join } from 'path';
 import * as fs from 'fs';
+import { Public } from '../auth/public.decorator';
 
 @Controller('visualize')
+@Public()
 export class SseController {
   constructor(private readonly aggregatorService: AggregatorService) {}
 

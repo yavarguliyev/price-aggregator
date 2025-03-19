@@ -12,6 +12,7 @@ This service collects, processes, and serves pricing and availability data from 
 - Price history tracking
 - Change monitoring
 - Simple HTML visualization of product data
+- API key authentication for secure access
 
 ## Tech Stack
 
@@ -93,12 +94,53 @@ API documentation is available using Swagger at:
 
 - `GET /api` - Swagger UI
 
+## Authentication
+
+The API is secured using API key authentication. To access protected endpoints, you need to include the API key in your requests.
+
+### API Key
+
+You can set your API key in the `.env` file:
+
+```
+API_KEY=your-secret-api-key
+```
+
+By default, the API uses a test key: `test-api-key-1234`
+
+### Using the API Key
+
+You can provide the API key in one of two ways:
+
+1. **HTTP Header** (recommended):
+   ```
+   x-api-key: your-api-key
+   ```
+
+2. **Query Parameter**:
+   ```
+   ?apiKey=your-api-key
+   ```
+
+Example with curl:
+```bash
+curl -H "x-api-key: your-api-key" http://localhost:3000/api/products
+```
+
+### Public Endpoints
+
+The following endpoints are accessible without an API key:
+
+- `/api` - Swagger UI documentation
+- `/visualize` - Real-time product visualization
+
 ## Configuration
 
 Configuration is handled through environment variables:
 
 - `DATABASE_URL` - PostgreSQL connection string
 - `PORT` - Application port (default: 3000)
+- `API_KEY` - API key for authentication
 
 These variables can be set in the `.env` file at the root of the project.
 
