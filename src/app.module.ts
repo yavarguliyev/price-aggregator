@@ -5,6 +5,8 @@ import { ProviderSimulatorModule } from './provider-simulator/provider-simulator
 import { AggregatorModule } from './aggregator/aggregator.module';
 import { AuthModule } from './auth/auth.module';
 import { RedisCacheModule } from './cache/cache.module';
+import { ResilienceModule } from './common/resilience/resilience.module';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -12,8 +14,12 @@ import { RedisCacheModule } from './cache/cache.module';
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    // Event emitter for real-time updates
+    EventEmitterModule.forRoot(),
     // Redis cache module for performance
     RedisCacheModule,
+    // Resilience module for error handling
+    ResilienceModule,
     // Core modules
     PrismaModule, 
     ProviderSimulatorModule, 

@@ -1,15 +1,14 @@
 import { Controller, Get } from '@nestjs/common';
 import { ProviderTwoService } from '../providers/provider-two.service';
-import { ProviderProduct } from '../models/product.model';
 import { Public } from '../../auth/public.decorator';
 
-@Controller('api/provider-two')
+@Controller('provider-two')
 export class ProviderTwoController {
   constructor(private readonly providerTwoService: ProviderTwoService) {}
 
+  @Get()
   @Public()
-  @Get('products')
-  getProducts(): ProviderProduct[] {
+  getProducts() {
     return this.providerTwoService.getProducts();
   }
 } 

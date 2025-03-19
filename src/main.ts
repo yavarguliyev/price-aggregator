@@ -1,46 +1,35 @@
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
-import { Public } from './auth/public.decorator';
+import { AppModule } from './app.module';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   
+  // Apply global pipes for validation
+  app.useGlobalPipes(new ValidationPipe({ transform: true }));
+  
+  // Swagger documentation setup
+  const config = new DocumentBuilder()
+    .setTitle('Price Aggregator API')
+    .setDescription('API for aggregating product prices from multiple providers')
+    .setVersion('1.0')
+    .addApiKey({ type: 'apiKey', name: 'X-API-KEY', in: 'header' }, 'api-key')
+    .build();
+  
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document);
+  
   // Enable CORS
   app.enableCors();
   
-  // Enable global validation pipe
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-  }));
+  // Set API prefix
+  app.setGlobalPrefix('api');
   
-  // Setup Swagger
-  const config = new DocumentBuilder()
-    .setTitle('Product Price Aggregator API')
-    .setDescription('API for aggregating product prices from multiple providers')
-    .setVersion('1.0')
-    .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'x-api-key')
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  // Start the application
+  const port = process.env.PORT || 3000;
+  await app.listen(port);
   
-  // Enable graceful shutdown
-  app.enableShutdownHooks();
-  
-  await app.listen(process.env.PORT ?? 3000);
-  console.log(`Application is running on: ${await app.getUrl()}`);
-  
-  // Handle process termination signals
-  const signals = ['SIGTERM', 'SIGINT'] as const;
-  for (const signal of signals) {
-    process.on(signal, async () => {
-      console.log(`Received ${signal}, starting graceful shutdown...`);
-      await app.close();
-      console.log('Application shutdown complete.');
-      process.exit(0);
-    });
-  }
+  console.log(`Application is running on: http://localhost:${port}`);
 }
 bootstrap();

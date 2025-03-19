@@ -1,19 +1,42 @@
-import { Controller, Get, Res, Sse } from '@nestjs/common';
-import { Response } from 'express';
-import { Observable, interval, map } from 'rxjs';
-import { AggregatorService } from './aggregator.service';
-import { join } from 'path';
-import * as fs from 'fs';
+import { Controller, Get, Sse } from '@nestjs/common';
+import { Observable, interval } from 'rxjs';
+import { map, switchMap } from 'rxjs/operators';
 import { Public } from '../auth/public.decorator';
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { AggregatorService } from './aggregator.service';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Controller('visualize')
+@ApiTags('Real-time Visualization')
 @Public()
 export class SseController {
   constructor(private readonly aggregatorService: AggregatorService) {}
 
   @Get()
-  serveHtml(@Res() res: Response) {
-    const htmlContent = `
+  async getVisualizationPage() {
+    const htmlPath = path.join(__dirname, '..', '..', 'public', 'visualization.html');
+    if (fs.existsSync(htmlPath)) {
+      return fs.readFileSync(htmlPath, 'utf8');
+    } else {
+      return this.getDefaultHtml();
+    }
+  }
+
+  @Sse('events')
+  @ApiOperation({ summary: 'Server-Sent Events endpoint for real-time updates' })
+  sse(): Observable<MessageEvent> {
+    return interval(2000).pipe(
+      switchMap(() => this.aggregatorService.getAllProducts()),
+      map(response => {
+        const data = JSON.stringify(response.data);
+        return { data } as MessageEvent;
+      }),
+    );
+  }
+
+  private getDefaultHtml() {
+    return `
     <!DOCTYPE html>
     <html>
     <head>
@@ -35,14 +58,16 @@ export class SseController {
             <th>Price</th>
             <th>Currency</th>
             <th>Available</th>
-            <th>Last Updated</th>
+            <th>Updated At</th>
           </tr>
         </thead>
-        <tbody id="productsBody"></tbody>
+        <tbody id="productsBody">
+          <!-- Products will be loaded here -->
+        </tbody>
       </table>
 
       <script>
-        const evtSource = new EventSource('/visualize/sse');
+        const evtSource = new EventSource('/api/visualize/events');
         const productsBody = document.getElementById('productsBody');
 
         evtSource.onmessage = function(event) {
@@ -73,31 +98,5 @@ export class SseController {
     </body>
     </html>
     `;
-    
-    res.type('text/html').send(htmlContent);
-  }
-
-  @Sse('sse')
-  sse(): Observable<{ data: string }> {
-    return new Observable<{ data: string }>(subscriber => {
-      const intervalId = setInterval(async () => {
-        try {
-          const products = await this.aggregatorService.getAllProducts();
-          subscriber.next({ data: JSON.stringify(products) });
-        } catch (error) {
-          console.error('Error in SSE stream:', error);
-        }
-      }, 2000);
-
-      // Prevent the timer from keeping the process alive
-      if (intervalId.unref) {
-        intervalId.unref();
-      }
-
-      // Clean up on unsubscribe
-      return () => {
-        clearInterval(intervalId);
-      };
-    });
   }
 } 

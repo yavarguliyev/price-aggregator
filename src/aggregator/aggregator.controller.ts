@@ -1,10 +1,10 @@
 import { Controller, Get, Param, Query, UseInterceptors } from '@nestjs/common';
 import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { AggregatorService } from './aggregator.service';
-import { ApiQuery, ApiParam, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiQuery, ApiParam, ApiOperation, ApiTags, ApiResponse } from '@nestjs/swagger';
 
-@ApiTags('Products API')
-@Controller('api/products')
+@Controller('products')
+@ApiTags('Products')
 export class AggregatorController {
   constructor(private readonly aggregatorService: AggregatorService) {}
 
