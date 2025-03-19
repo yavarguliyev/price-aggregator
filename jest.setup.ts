@@ -23,4 +23,9 @@ afterAll(async () => {
   if ((global as any).gc) {
     (global as any).gc();
   }
-}); 
+});
+
+// Set default timeout for tests
+jest.setTimeout(30000);
+
+// You can add more global setup here if needed 

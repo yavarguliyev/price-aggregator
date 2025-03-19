@@ -1,33 +1,27 @@
 # Product Price Aggregator
 
-A NestJS application that aggregates pricing and availability data for digital products from multiple external APIs.
+A NestJS application that aggregates pricing and availability data for digital products from multiple external APIs, built with Clean Architecture principles.
 
-## Project Overview
+## Features
 
-This service collects, processes, and serves pricing and availability data from multiple third-party providers. It features:
-
-- Real-time data collection from simulated provider APIs
-- Data normalization and storage
-- REST API endpoints for querying the aggregated data
-- Price history tracking
-- Change monitoring
-- Simple HTML visualization of product data
-- API key authentication for secure access
-- Rate limiting for API protection
-- Health checks for monitoring
-- Enhanced security with Helmet
+- Real-time price and availability aggregation from multiple providers
+- Clean Architecture implementation for better maintainability
+- REST API with Swagger documentation
+- Server-Sent Events (SSE) for real-time updates
+- API key authentication
+- Rate limiting
+- Health monitoring
+- Docker support for easy deployment
 
 ## Tech Stack
 
 - NestJS (TypeScript)
 - PostgreSQL with Prisma ORM
 - Redis for caching
-- Docker for containerization
+- Docker & Docker Compose
 - Swagger for API documentation
-- Server-Sent Events (SSE) for real-time updates
-- Circuit Breaker pattern for resilience
 
-## Setup and Installation
+## Quick Start
 
 ### Prerequisites
 
@@ -35,184 +29,134 @@ This service collects, processes, and serves pricing and availability data from 
 - npm
 - Docker and Docker Compose
 
-### Using the Deployment Script
+### Running the Application
 
-The easiest way to get started is using the deployment script:
-
-```bash
-# Make the script executable (first time only)
-chmod +x deploy.sh
-
-# Development mode (PostgreSQL + Redis in Docker, app runs locally)
-./deploy.sh --dev
-
-# Production mode (all components in Docker)
-./deploy.sh --prod
-
-# Build containers before starting
-./deploy.sh --prod --build
-
-# Stop all containers
-./deploy.sh --down
-
-# View container logs
-./deploy.sh --logs
-
-# Display help
-./deploy.sh --help
-```
-
-### Manual Installation Steps
-
-1. Clone the repository
-
+1. Clone the repository:
 ```bash
 git clone <repository-url>
 cd price-aggregator-nest
 ```
 
-2. Install dependencies
-
+2. Install dependencies:
 ```bash
 npm install
 ```
 
-3. Start the PostgreSQL and Redis databases using Docker
-
+3. Set up environment variables:
 ```bash
-docker-compose up -d postgres redis
+cp .env.example .env
 ```
 
-4. Apply database migrations
-
+4. Start the database services (PostgreSQL and Redis):
 ```bash
-npx prisma migrate dev --name init
+npm run docker:db
 ```
 
-5. Start the application
+5. Apply database migrations:
+```bash
+npm run prisma:migrate
+```
 
+6. Start the application:
 ```bash
 npm run start:dev
 ```
 
-The application will be available at http://localhost:3000/api
+The application will be available at http://localhost:3000
+
+## Project Structure
+
+The project follows Clean Architecture principles:
+
+```
+src/
+├── api/              # API layer (controllers, routes)
+├── application/      # Application layer (use cases, services)
+├── core/            # Core layer (interfaces, shared code)
+├── domain/          # Domain layer (entities, value objects)
+└── infrastructure/  # Infrastructure layer (repositories, external services)
+```
 
 ## API Endpoints
 
-The following endpoints are available:
+### Authentication
+All endpoints except `/api-docs`, `/visualize`, and `/api/health` require an API key.
 
-- `GET /api/products` - Get a list of all aggregated products
-  - Query parameters: `name`, `minPrice`, `maxPrice`, `availability`, `provider`, `page`, `limit`, `includeStale`
-- `GET /api/products/:id` - Get detailed information for a specific product
-- `GET /api/products/changes` - Get products with price or availability changes
-  - Query parameters: `timeframe` (in minutes)
-- `GET /api/products/stale` - Get products that haven't been updated recently
+**Header**: `x-api-key: your-api-key`
 
-### Provider Simulators
+### Available Endpoints
 
-The application simulates several product providers:
+#### Products
+```http
+# Get all products
+GET /api/products
+Query Parameters:
+  - name: string (optional) - Filter by product name
+  - minPrice: number (optional) - Minimum price filter
+  - maxPrice: number (optional) - Maximum price filter
+  - availability: boolean (optional) - Filter by availability
+  - provider: string (optional) - Filter by provider name
+  - page: number (optional) - Page number (default: 1)
+  - limit: number (optional) - Items per page (default: 10)
+  - includeStale: boolean (optional) - Include stale products
 
-- `GET /api/provider-one/products` - Get products from Provider One
-- `GET /api/provider-two/products` - Get products from Provider Two
-- `GET /api/provider-three/products` - Get products from Provider Three
+# Get product by ID
+GET /api/products/:id
 
-### Health Check
+# Get products with changes
+GET /api/products/changes
+Query Parameters:
+  - timeframe: number (optional) - Time window in minutes (default: 60)
 
-A health check endpoint is available at:
-
-- `GET /api/health` - Provides health information about the application
-
-### Visualization
-
-A simple HTML visualization of products is available at:
-
-- `GET /visualize` - View product updates in real-time
-
-## Documentation
-
-API documentation is available using Swagger at:
-
-- `GET /api-docs` - Swagger UI
-
-## Authentication
-
-The API is secured using API key authentication. To access protected endpoints, you need to include the API key in your requests.
-
-### API Key
-
-You can set your API key in the `.env` file:
-
-```
-API_KEY=your-secret-api-key
+# Get stale products
+GET /api/products/stale
 ```
 
-By default, the API uses a test key: `test-api-key-1234`
+#### Provider Simulators
+```http
+# Provider One products
+GET /api/provider-one/products
 
-### Using the API Key
+# Provider Two products
+GET /api/provider-two/products
 
-You can provide the API key in one of two ways:
-
-1. **HTTP Header** (recommended):
-   ```
-   x-api-key: your-api-key
-   ```
-
-2. **Query Parameter**:
-   ```
-   ?apiKey=your-api-key
-   ```
-
-Example with curl:
-```bash
-curl -H "x-api-key: your-api-key" http://localhost:3000/api/products
+# Provider Three products
+GET /api/provider-three/products
 ```
 
-### Public Endpoints
+#### Health & Documentation
+```http
+# Health check
+GET /api/health
 
-The following endpoints are accessible without an API key:
+# Swagger documentation
+GET /api-docs
 
-- `/api-docs` - Swagger UI documentation
-- `/visualize` - Real-time product visualization
-- `/api/health` - Health check endpoint
+# Real-time visualization
+GET /visualize
+```
 
-## Configuration
+## Docker Commands
 
-Configuration is handled through environment variables:
-
-- `DATABASE_URL` - PostgreSQL connection string
-- `REDIS_HOST` - Redis host (default: localhost)
-- `REDIS_PORT` - Redis port (default: 6379)
-- `PORT` - Application port (default: 3000)
-- `API_KEY` - API key for authentication
-- `FETCH_INTERVAL` - Data fetch interval in milliseconds (default: 10000)
-- `STALENESS_THRESHOLD` - Time in milliseconds after which data is considered stale (default: 60000)
-
-These variables can be set in the `.env` file at the root of the project.
-
-## Docker
-
-The application includes complete Docker setup:
-
-- `Dockerfile` for the NestJS application
-- `docker-compose.yml` for orchestrating all services
-
-To run the application in Docker:
+The application includes convenient npm scripts for Docker operations:
 
 ```bash
-# Build and start all services
-docker-compose up -d --build
+# Start database services (PostgreSQL + Redis)
+npm run docker:db
 
-# View logs
-docker-compose logs -f
+# View database UI
+npm run prisma:studio
 
-# Stop all services
-docker-compose down
+# Generate Prisma client
+npm run prisma:generate
+
+# Apply database migrations
+npm run prisma:migrate
 ```
 
-## Testing
+## Development
 
-The application includes unit and integration tests:
-
+### Running Tests
 ```bash
 # Run all tests
 npm test
@@ -223,6 +167,38 @@ npm run test:cov
 # Run tests in watch mode
 npm run test:watch
 ```
+
+### Code Quality
+```bash
+# Format code
+npm run format
+
+# Lint code
+npm run lint
+```
+
+## Environment Variables
+
+The project uses environment variables for configuration. A `.env.example` file is provided as a template that you need to copy (as mentioned in step 3 above).
+
+Edit your `.env` file with appropriate values:
+
+```env
+# Database
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/price-aggregator"
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Application
+PORT=3000
+API_KEY=your-api-key
+FETCH_INTERVAL=10000
+STALENESS_THRESHOLD=60000
+```
+
+**Note**: The `.env` file is excluded from Git in `.gitignore` to prevent committing sensitive information.
 
 ## License
 
