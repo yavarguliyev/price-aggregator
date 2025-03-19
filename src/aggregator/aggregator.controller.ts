@@ -19,6 +19,10 @@ export class AggregatorController {
   }
 
   @ApiOperation({ summary: 'Get stale products' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Returns a list of products that have not been updated recently or are no longer provided by their source' 
+  })
   @Get('stale')
   @UseInterceptors(CacheInterceptor)
   @CacheKey('products-stale')

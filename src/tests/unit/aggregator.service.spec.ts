@@ -3,6 +3,9 @@ import { AggregatorService } from '../../aggregator/aggregator.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ProviderOneService } from '../../provider-simulator/providers/provider-one.service';
 import { ProviderTwoService } from '../../provider-simulator/providers/provider-two.service';
+import { ProviderThreeService } from '../../provider-simulator/providers/provider-three.service';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ProviderProduct } from '../../provider-simulator/models/product.model';
 import { Logger } from '@nestjs/common';
 
@@ -91,6 +94,8 @@ const mockPrismaService = {
     findMany: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
+    updateMany: jest.fn(),
+    count: jest.fn(),
   },
   price: {
     findFirst: jest.fn(),
@@ -113,11 +118,32 @@ const mockProviderTwoService = {
   getProducts: jest.fn(),
 };
 
+const mockProviderThreeService = {
+  getProducts: jest.fn(),
+};
+
+// Mock config service
+const mockConfigService = {
+  get: jest.fn().mockImplementation((key) => {
+    if (key === 'FETCH_INTERVAL') return 10000;
+    if (key === 'STALENESS_THRESHOLD') return 60000;
+    return null;
+  }),
+};
+
+// Mock event emitter
+const mockEventEmitter = {
+  emit: jest.fn(),
+};
+
 describe('AggregatorService', () => {
   let service: AggregatorService;
   let prismaService: PrismaService;
   let providerOneService: ProviderOneService;
   let providerTwoService: ProviderTwoService;
+  let providerThreeService: ProviderThreeService;
+  let configService: ConfigService;
+  let eventEmitter: EventEmitter2;
 
   beforeEach(async () => {
     // Reset all mocks
@@ -201,12 +227,19 @@ describe('AggregatorService', () => {
       return mockProducts.map(p => ({ ...p, id: `two-${p.id}` }));
     });
 
+    mockProviderThreeService.getProducts.mockImplementation(() => {
+      return mockProducts.map(p => ({ ...p, id: `three-${p.id}` }));
+    });
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AggregatorService,
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ProviderOneService, useValue: mockProviderOneService },
         { provide: ProviderTwoService, useValue: mockProviderTwoService },
+        { provide: ProviderThreeService, useValue: mockProviderThreeService },
+        { provide: ConfigService, useValue: mockConfigService },
+        { provide: EventEmitter2, useValue: mockEventEmitter },
       ],
     })
       .setLogger(new Logger())
@@ -216,6 +249,9 @@ describe('AggregatorService', () => {
     prismaService = module.get<PrismaService>(PrismaService);
     providerOneService = module.get<ProviderOneService>(ProviderOneService);
     providerTwoService = module.get<ProviderTwoService>(ProviderTwoService);
+    providerThreeService = module.get<ProviderThreeService>(ProviderThreeService);
+    configService = module.get<ConfigService>(ConfigService);
+    eventEmitter = module.get<EventEmitter2>(EventEmitter2);
 
     // Disable the interval in onModuleInit
     jest.spyOn(global, 'setInterval').mockImplementation(() => {
@@ -250,9 +286,10 @@ describe('AggregatorService', () => {
       
       await service.fetchAllProviders();
       
-      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      expect(fetchSpy).toHaveBeenCalledTimes(3);
       expect(fetchSpy).toHaveBeenCalledWith('provider-one', mockProducts);
       expect(fetchSpy).toHaveBeenCalledWith('provider-two', expect.any(Array));
+      expect(fetchSpy).toHaveBeenCalledWith('provider-three', expect.any(Array));
     });
 
     it('should log error when fetching fails', async () => {
@@ -270,10 +307,10 @@ describe('AggregatorService', () => {
     it('should return all products with their latest price and availability', async () => {
       const result = await service.getAllProducts();
       
-      expect(result).toHaveLength(mockExistingProducts.length);
-      expect(result[0]).toHaveProperty('id', mockExistingProducts[0].id);
-      expect(result[0]).toHaveProperty('price', mockExistingProducts[0].prices[0].value);
-      expect(result[0]).toHaveProperty('isAvailable', mockExistingProducts[0].availability[0].isAvailable);
+      expect(result.data).toHaveLength(mockExistingProducts.length);
+      expect(result.data[0]).toHaveProperty('id', mockExistingProducts[0].id);
+      expect(result.data[0]).toHaveProperty('price', mockExistingProducts[0].prices[0].value);
+      expect(result.data[0]).toHaveProperty('isAvailable', mockExistingProducts[0].availability[0].isAvailable);
     });
 
     it('should filter products by name', async () => {
@@ -281,8 +318,8 @@ describe('AggregatorService', () => {
       
       const result = await service.getAllProducts({ name: 'Test Product 1' });
       
-      expect(result).toHaveLength(1);
-      expect(result[0].name).toBe('Test Product 1');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].name).toBe('Test Product 1');
       expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -293,15 +330,32 @@ describe('AggregatorService', () => {
     });
 
     it('should filter products by price range', async () => {
+      mockPrismaService.product.findMany.mockResolvedValue([
+        {
+          ...mockExistingProducts[0],
+          prices: [{ value: 100, currency: 'USD' }]
+        }
+      ]);
+      
       const result = await service.getAllProducts({ minPrice: 100, maxPrice: 150 });
       
-      expect(result.every(p => p.price >= 100 && p.price <= 150)).toBe(true);
+      expect(result.data.length).toBeGreaterThan(0);
+      expect(result.data[0].price).toBeGreaterThanOrEqual(100);
+      expect(result.data[0].price).toBeLessThanOrEqual(150);
     });
 
     it('should filter products by availability', async () => {
+      mockPrismaService.product.findMany.mockResolvedValue([
+        {
+          ...mockExistingProducts[0],
+          availability: [{ isAvailable: true }]
+        }
+      ]);
+      
       const result = await service.getAllProducts({ availability: true });
       
-      expect(result.every(p => p.isAvailable === true)).toBe(true);
+      expect(result.data.length).toBeGreaterThan(0);
+      expect(result.data[0].isAvailable).toBe(true);
     });
 
     it('should filter products by provider', async () => {
@@ -309,8 +363,8 @@ describe('AggregatorService', () => {
       
       const result = await service.getAllProducts({ provider: 'provider-one' });
       
-      expect(result).toHaveLength(1);
-      expect(result[0].provider).toBe('provider-one');
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].provider).toBe('provider-one');
       expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -318,6 +372,41 @@ describe('AggregatorService', () => {
           }),
         }),
       );
+    });
+
+    it('should return products with pagination', async () => {
+      // Arrange
+      const mockDbProducts = [
+        {
+          id: 'prod-1',
+          name: 'Product 1',
+          description: 'Description 1',
+          providerId: 'p1-001',
+          providerName: 'provider-one',
+          isStale: false,
+          lastFetchedAt: new Date(),
+          updatedAt: new Date(),
+          prices: [{ value: 10.99, currency: 'USD' }],
+          availability: [{ isAvailable: true }],
+        },
+      ];
+
+      mockPrismaService.product.findMany.mockResolvedValue(mockDbProducts);
+      mockPrismaService.product.count.mockResolvedValue(15);
+
+      // Act
+      const result = await service.getAllProducts({
+        page: 1,
+        limit: 10,
+      });
+
+      // Assert
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('meta');
+      expect(result.meta).toHaveProperty('totalItems', 15);
+      expect(result.meta).toHaveProperty('totalPages', 2);
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toHaveProperty('name', 'Product 1');
     });
   });
 
@@ -427,6 +516,67 @@ describe('AggregatorService', () => {
       
       // Verify clearInterval was called with the mock interval ID
       expect(clearIntervalSpy).toHaveBeenCalledWith(mockIntervalId);
+    });
+  });
+
+  describe('checkAndMarkStaleProducts', () => {
+    it('should mark products as stale if they have not been updated within the threshold', async () => {
+      // Arrange
+      const currentTime = new Date();
+      const oldTime = new Date(currentTime.getTime() - 120000); // 2 minutes ago (beyond the 1 minute threshold)
+      
+      mockPrismaService.product.updateMany.mockResolvedValue({ count: 2 });
+
+      // Act
+      await service.checkAndMarkStaleProducts();
+
+      // Assert
+      expect(mockPrismaService.product.updateMany).toHaveBeenCalledWith({
+        where: {
+          lastFetchedAt: { lt: expect.any(Date) },
+          isStale: false
+        },
+        data: {
+          isStale: true
+        }
+      });
+    });
+  });
+
+  describe('getStaleProducts', () => {
+    it('should return a list of stale products with correct format', async () => {
+      // Arrange
+      const mockStaleProducts = [
+        {
+          id: 'stale-1',
+          name: 'Stale Product',
+          description: 'This product is stale',
+          providerId: 'p1-old',
+          providerName: 'provider-one',
+          isStale: true,
+          lastFetchedAt: new Date(Date.now() - 120000),
+          updatedAt: new Date(Date.now() - 120000),
+          prices: [{ value: 15.99, currency: 'USD' }],
+          availability: [{ isAvailable: false }],
+        },
+      ];
+
+      mockPrismaService.product.findMany.mockResolvedValue(mockStaleProducts);
+
+      // Act
+      const result = await service.getStaleProducts();
+
+      // Assert
+      expect(mockPrismaService.product.findMany).toHaveBeenCalledWith({
+        where: { isStale: true },
+        include: expect.any(Object),
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]).toHaveProperty('staleReason');
+      expect(result[0]).toHaveProperty('isStale', true);
+      expect(result[0]).toHaveProperty('name', 'Stale Product');
+      expect(result[0]).toHaveProperty('price', 15.99);
     });
   });
 }); 

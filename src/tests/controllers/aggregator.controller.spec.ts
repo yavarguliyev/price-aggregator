@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AggregatorController } from '../../aggregator/aggregator.controller';
 import { AggregatorService } from '../../aggregator/aggregator.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { CacheModule } from '@nestjs/cache-manager';
 
 describe('AggregatorController', () => {
   let controller: AggregatorController;
@@ -84,12 +86,15 @@ describe('AggregatorController', () => {
     jest.clearAllMocks();
 
     const module: TestingModule = await Test.createTestingModule({
+      imports: [
+        CacheModule.register()
+      ],
       controllers: [AggregatorController],
       providers: [
         {
           provide: AggregatorService,
           useValue: mockAggregatorService,
-        },
+        }
       ],
     }).compile();
 
@@ -110,7 +115,11 @@ describe('AggregatorController', () => {
       const result = await controller.getAllProducts();
 
       expect(result).toEqual(mockProducts);
-      expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({});
+      expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({
+        page: 1,
+        limit: 10,
+        includeStale: false,
+      });
     });
 
     it('should apply name filter', async () => {
@@ -118,7 +127,12 @@ describe('AggregatorController', () => {
       const result = await controller.getAllProducts(name);
 
       expect(result).toEqual(mockProducts);
-      expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({ name });
+      expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({
+        name,
+        page: 1,
+        limit: 10,
+        includeStale: false,
+      });
     });
 
     it('should apply price range filter', async () => {
@@ -130,6 +144,9 @@ describe('AggregatorController', () => {
       expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({
         minPrice,
         maxPrice,
+        page: 1,
+        limit: 10,
+        includeStale: false,
       });
     });
 
@@ -140,6 +157,9 @@ describe('AggregatorController', () => {
       expect(result).toEqual(mockProducts);
       expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({
         availability,
+        page: 1,
+        limit: 10,
+        includeStale: false,
       });
     });
 
@@ -150,6 +170,9 @@ describe('AggregatorController', () => {
       expect(result).toEqual(mockProducts);
       expect(mockAggregatorService.getAllProducts).toHaveBeenCalledWith({
         provider,
+        page: 1,
+        limit: 10,
+        includeStale: false,
       });
     });
 
@@ -168,6 +191,9 @@ describe('AggregatorController', () => {
         maxPrice,
         availability,
         provider,
+        page: 1,
+        limit: 10,
+        includeStale: false,
       });
     });
   });

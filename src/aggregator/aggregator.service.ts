@@ -5,12 +5,14 @@ import { ProviderTwoService } from '../provider-simulator/providers/provider-two
 import { ProviderThreeService } from '../provider-simulator/providers/provider-three.service';
 import { ProviderProduct } from '../provider-simulator/models/product.model';
 import { Availability, Price, Product } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AggregatorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AggregatorService.name);
-  private readonly fetchInterval = 10000; // 10 seconds
-  private readonly stalenessThreshold = 30000; // 30 seconds - threshold for marking data as stale
+  private readonly fetchInterval: number;
+  private readonly stalenessThreshold: number;
   private intervalId: NodeJS.Timeout | null = null;
   private stalenessCheckIntervalId: NodeJS.Timeout | null = null;
   
@@ -19,7 +21,18 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     private readonly providerOneService: ProviderOneService,
     private readonly providerTwoService: ProviderTwoService,
     private readonly providerThreeService: ProviderThreeService,
-  ) {}
+    private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2
+  ) {
+    // Read configuration from environment variables or use defaults
+    this.fetchInterval = this.configService.get<number>('FETCH_INTERVAL') || 10000; // 10 seconds
+    
+    // Staleness threshold - time after which data is considered stale if not updated
+    this.stalenessThreshold = this.configService.get<number>('STALENESS_THRESHOLD') || 60000; // 1 minute
+    
+    this.logger.log(`Fetch interval set to ${this.fetchInterval}ms`);
+    this.logger.log(`Staleness threshold set to ${this.stalenessThreshold}ms`);
+  }
 
   async onModuleInit() {
     // Initial fetch from all providers
@@ -83,7 +96,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     }
     
     // Update products from this provider that were not in this fetch
-    await this.prisma.product.updateMany({
+    // This marks products as stale if they disappeared from the provider's data
+    const staleProductsCount = await this.prisma.product.updateMany({
       where: {
         providerName: providerName,
         providerId: { notIn: fetchedProductIds },
@@ -93,6 +107,10 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
         isStale: true
       }
     });
+    
+    if (staleProductsCount.count > 0) {
+      this.logger.log(`Marked ${staleProductsCount.count} products from ${providerName} as stale (no longer provided)`);
+    }
   }
 
   private async saveProduct(providerName: string, providerProduct: ProviderProduct) {
@@ -106,6 +124,7 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       });
 
       let product: Product;
+      let productCreated = false;
       
       if (existingProduct) {
         // Update the existing product
@@ -131,6 +150,7 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
             isStale: false,
           },
         });
+        productCreated = true;
       }
 
       // Save the current price
@@ -139,6 +159,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
         orderBy: { createdAt: 'desc' },
       });
 
+      let priceChanged = false;
+      
       // Only create a new price record if the price has changed
       if (!lastPrice || lastPrice.value !== providerProduct.price || lastPrice.currency !== providerProduct.currency) {
         await this.prisma.price.create({
@@ -148,6 +170,7 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
             productId: product.id,
           },
         });
+        priceChanged = true;
       }
 
       // Save the current availability
@@ -156,6 +179,8 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
         orderBy: { createdAt: 'desc' },
       });
 
+      let availabilityChanged = false;
+      
       // Only create a new availability record if it has changed
       if (!lastAvailability || lastAvailability.isAvailable !== providerProduct.availability) {
         await this.prisma.availability.create({
@@ -164,6 +189,18 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
             productId: product.id,
           },
         });
+        availabilityChanged = true;
+      }
+      
+      // Emit event for real-time updates if something changed
+      if (productCreated || priceChanged || availabilityChanged) {
+        const productWithLatestData = {
+          ...product,
+          price: providerProduct.price,
+          currency: providerProduct.currency,
+          isAvailable: providerProduct.availability
+        };
+        this.eventEmitter.emit('product.updated', productWithLatestData);
       }
     } catch (error) {
       this.logger.error(`Error saving product ${providerProduct.id} from ${providerName}: ${error.message}`);
@@ -171,7 +208,11 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     }
   }
   
-  // Periodically check for products that haven't been updated recently and mark them as stale
+  /**
+   * Check for products that haven't been updated recently and mark them as stale.
+   * This method is called periodically to ensure data freshness.
+   * Products are considered stale if they haven't been updated within the staleness threshold.
+   */
   async checkAndMarkStaleProducts() {
     const staleThresholdTime = new Date(Date.now() - this.stalenessThreshold);
     
@@ -187,44 +228,72 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
       });
       
       if (result.count > 0) {
-        this.logger.log(`Marked ${result.count} products as stale`);
+        this.logger.log(`Marked ${result.count} products as stale due to age (not updated since ${staleThresholdTime.toISOString()})`);
       }
     } catch (error) {
       this.logger.error(`Error checking for stale products: ${error.message}`);
     }
   }
 
-  // Get all products that are marked as stale
+  /**
+   * Retrieve all products that are marked as stale.
+   * Stale products are those that haven't been updated within the staleness threshold
+   * or are no longer provided by their original source.
+   */
   async getStaleProducts() {
-    const staleProducts = await this.prisma.product.findMany({
-      where: {
-        isStale: true
-      },
-      include: {
-        prices: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
+    try {
+      const staleProducts = await this.prisma.product.findMany({
+        where: {
+          isStale: true
         },
-        availability: {
-          orderBy: { createdAt: 'desc' },
-          take: 1,
+        include: {
+          prices: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
+          availability: {
+            orderBy: { createdAt: 'desc' },
+            take: 1,
+          },
         },
-      },
-    });
+      });
 
-    return staleProducts.map(product => ({
-      id: product.id,
-      name: product.name,
-      description: product.description,
-      provider: product.providerName,
-      providerId: product.providerId,
-      price: product.prices[0]?.value,
-      currency: product.prices[0]?.currency,
-      isAvailable: product.availability[0]?.isAvailable,
-      isStale: product.isStale,
-      lastFetchedAt: product.lastFetchedAt,
-      updatedAt: product.updatedAt,
-    }));
+      this.logger.log(`Retrieved ${staleProducts.length} stale products`);
+      
+      return staleProducts.map(product => ({
+        id: product.id,
+        name: product.name,
+        description: product.description,
+        provider: product.providerName,
+        providerId: product.providerId,
+        price: product.prices[0]?.value,
+        currency: product.prices[0]?.currency,
+        isAvailable: product.availability[0]?.isAvailable,
+        isStale: product.isStale,
+        lastFetchedAt: product.lastFetchedAt,
+        updatedAt: product.updatedAt,
+        staleReason: this.getStaleReason(product),
+      }));
+    } catch (error) {
+      this.logger.error(`Error retrieving stale products: ${error.message}`);
+      throw error;
+    }
+  }
+  
+  /**
+   * Determine why a product is marked as stale.
+   * @param product The stale product
+   * @returns A description of why the product is stale
+   */
+  private getStaleReason(product: Product): string {
+    const now = new Date();
+    const lastFetchDiff = now.getTime() - product.lastFetchedAt.getTime();
+    
+    if (lastFetchDiff > this.stalenessThreshold) {
+      return `Not updated in ${Math.floor(lastFetchDiff / 1000)} seconds (threshold: ${this.stalenessThreshold / 1000} seconds)`;
+    } else {
+      return 'No longer provided by source';
+    }
   }
 
   async getAllProducts(filters?: {

@@ -3,6 +3,11 @@ import { SseController } from '../../aggregator/sse.controller';
 import { AggregatorService } from '../../aggregator/aggregator.service';
 import { Response } from 'express';
 import { Observable } from 'rxjs';
+import * as fs from 'fs';
+import * as path from 'path';
+
+jest.mock('fs');
+jest.mock('path');
 
 describe('SseController', () => {
   let controller: SseController;
@@ -16,26 +21,28 @@ describe('SseController', () => {
 
   // Mock aggregator service
   const mockAggregatorService = {
-    getAllProducts: jest.fn().mockResolvedValue([
-      {
-        id: '1',
-        name: 'Test Product 1',
-        price: 100,
-        currency: 'USD',
-        isAvailable: true,
-        provider: 'provider-one',
-        updatedAt: new Date().toISOString(),
-      },
-      {
-        id: '2',
-        name: 'Test Product 2',
-        price: 200,
-        currency: 'USD',
-        isAvailable: false,
-        provider: 'provider-two',
-        updatedAt: new Date().toISOString(),
-      },
-    ]),
+    getAllProducts: jest.fn().mockResolvedValue({
+      data: [
+        {
+          id: '1',
+          name: 'Test Product 1',
+          price: 100,
+          currency: 'USD',
+          isAvailable: true,
+          provider: 'provider-one',
+          updatedAt: new Date().toISOString(),
+        },
+        {
+          id: '2',
+          name: 'Test Product 2',
+          price: 200,
+          currency: 'USD',
+          isAvailable: false,
+          provider: 'provider-two',
+          updatedAt: new Date().toISOString(),
+        },
+      ]
+    }),
   };
 
   beforeEach(async () => {
@@ -63,14 +70,29 @@ describe('SseController', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('serveHtml', () => {
-    it('should return HTML page with table', () => {
-      controller.serveHtml(mockResponse);
+  describe('getVisualizationPage', () => {
+    it('should return HTML content when file exists', async () => {
+      const mockHtml = '<html>Test HTML</html>';
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+      (fs.readFileSync as jest.Mock).mockReturnValue(mockHtml);
       
-      expect(mockResponse.type).toHaveBeenCalledWith('text/html');
-      expect(mockResponse.send).toHaveBeenCalledWith(expect.stringContaining('<!DOCTYPE html>'));
-      expect(mockResponse.send).toHaveBeenCalledWith(expect.stringContaining('<table id="productsTable">'));
-      expect(mockResponse.send).toHaveBeenCalledWith(expect.stringContaining('EventSource'));
+      const result = await controller.getVisualizationPage();
+      
+      expect(result).toBe(mockHtml);
+      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).toHaveBeenCalled();
+    });
+
+    it('should return default HTML when file does not exist', async () => {
+      (fs.existsSync as jest.Mock).mockReturnValue(false);
+      
+      const result = await controller.getVisualizationPage();
+      
+      expect(result).toContain('<!DOCTYPE html>');
+      expect(result).toContain('<table id="productsTable">');
+      expect(result).toContain('EventSource');
+      expect(fs.existsSync).toHaveBeenCalled();
+      expect(fs.readFileSync).not.toHaveBeenCalled();
     });
   });
 
