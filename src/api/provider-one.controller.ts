@@ -1,8 +1,8 @@
-import { Controller, Get } from "@nestjs/common";
-import { ProviderOneService } from "../infrastructure/services/provider-one.service";
-import { Public } from "../core/auth/public.decorator";
+import { Controller, Get } from '@nestjs/common';
+import { ProviderOneService } from '../infrastructure/services/provider-one.service';
+import { Public } from '../core/auth/public.decorator';
 
-@Controller("provider-one")
+@Controller('provider-one')
 export class ProviderOneController {
   constructor(private readonly providerOneService: ProviderOneService) {}
 

@@ -1,5 +1,5 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { EventEmitter2 } from "@nestjs/event-emitter";
+import { Injectable, Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface CircuitBreakerOptions {
   failureThreshold: number;
@@ -7,30 +7,17 @@ export interface CircuitBreakerOptions {
   halfOpenTimeout: number;
 }
 
-export enum CircuitState {
-  CLOSED = "CLOSED",
-  OPEN = "OPEN",
-  HALF_OPEN = "HALF_OPEN",
-}
-
-export interface CircuitBreakerEvent {
-  providerId: string;
-  state: CircuitState;
-  timestamp: Date;
+interface CircuitBreakerState {
+  state: 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+  failures: number;
+  lastFailureTime?: Date;
+  lastSuccessTime?: Date;
 }
 
 @Injectable()
 export class CircuitBreakerService {
   private readonly logger = new Logger(CircuitBreakerService.name);
-  private readonly circuits: Map<
-    string,
-    {
-      state: CircuitState;
-      failures: number;
-      lastFailureTime: Date;
-      lastSuccessTime: Date;
-    }
-  > = new Map();
+  private readonly circuits: Map<string, CircuitBreakerState> = new Map();
 
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
@@ -39,13 +26,13 @@ export class CircuitBreakerService {
     operation: () => Promise<T>,
     options: CircuitBreakerOptions = {
       failureThreshold: 5,
-      resetTimeout: 60000, // 1 minute
-      halfOpenTimeout: 30000, // 30 seconds
-    },
+      resetTimeout: 60000,
+      halfOpenTimeout: 30000
+    }
   ): Promise<T> {
     const circuit = this.getOrCreateCircuit(providerId);
 
-    if (this.isCircuitOpen(circuit, options)) {
+    if (this.isCircuitOpen(circuit, options, providerId)) {
       this.logger.warn(`Circuit breaker is OPEN for provider ${providerId}`);
       throw new Error(`Circuit breaker is OPEN for provider ${providerId}`);
     }
@@ -60,84 +47,73 @@ export class CircuitBreakerService {
     }
   }
 
-  private getOrCreateCircuit(providerId: string) {
+  private getOrCreateCircuit(providerId: string): CircuitBreakerState {
     if (!this.circuits.has(providerId)) {
-      this.circuits.set(providerId, {
-        state: CircuitState.CLOSED,
-        failures: 0,
-        lastFailureTime: new Date(),
-        lastSuccessTime: new Date(),
-      });
+      this.circuits.set(providerId, { state: 'CLOSED', failures: 0 });
     }
-    return this.circuits.get(providerId);
+
+    return this.circuits.get(providerId)!;
   }
 
-  private isCircuitOpen(circuit: any, options: CircuitBreakerOptions): boolean {
-    if (circuit.state === CircuitState.CLOSED) {
+  private isCircuitOpen(
+    circuit: CircuitBreakerState,
+    options: CircuitBreakerOptions,
+    providerId: string
+  ): boolean {
+    if (circuit.state === 'CLOSED') {
       return false;
     }
 
     const now = new Date();
-    const timeSinceLastFailure =
-      now.getTime() - circuit.lastFailureTime.getTime();
+    const timeSinceLastFailure = now.getTime() - (circuit.lastFailureTime?.getTime() || 0);
 
-    if (
-      circuit.state === CircuitState.OPEN &&
-      timeSinceLastFailure >= options.resetTimeout
-    ) {
-      circuit.state = CircuitState.HALF_OPEN;
-      this.emitStateChange(circuit, CircuitState.HALF_OPEN);
+    if (circuit.state === 'OPEN' && timeSinceLastFailure >= options.resetTimeout) {
+      circuit.state = 'HALF_OPEN';
+      this.emitStateChange(circuit, 'HALF_OPEN', providerId);
       return false;
     }
 
-    if (
-      circuit.state === CircuitState.HALF_OPEN &&
-      timeSinceLastFailure >= options.halfOpenTimeout
-    ) {
-      circuit.state = CircuitState.OPEN;
-      this.emitStateChange(circuit, CircuitState.OPEN);
+    if (circuit.state === 'HALF_OPEN' && timeSinceLastFailure >= options.halfOpenTimeout) {
+      circuit.state = 'OPEN';
+      this.emitStateChange(circuit, 'OPEN', providerId);
       return true;
     }
 
-    return circuit.state === CircuitState.OPEN;
+    return circuit.state === 'OPEN';
   }
 
-  private handleSuccess(providerId: string, circuit: any) {
+  private handleSuccess(providerId: string, circuit: CircuitBreakerState) {
     circuit.failures = 0;
     circuit.lastSuccessTime = new Date();
-    circuit.state = CircuitState.CLOSED;
-    this.emitStateChange(circuit, CircuitState.CLOSED);
+    circuit.state = 'CLOSED';
+    this.emitStateChange(circuit, 'CLOSED', providerId);
   }
 
-  private handleFailure(
-    providerId: string,
-    circuit: any,
-    options: CircuitBreakerOptions,
-  ) {
+  private handleFailure(providerId: string, circuit: CircuitBreakerState, options: CircuitBreakerOptions) {
     circuit.failures++;
     circuit.lastFailureTime = new Date();
 
     if (circuit.failures >= options.failureThreshold) {
-      circuit.state = CircuitState.OPEN;
-      this.emitStateChange(circuit, CircuitState.OPEN);
+      circuit.state = 'OPEN';
+      this.emitStateChange(circuit, 'OPEN', providerId);
       this.logger.error(
         `Circuit breaker OPENED for provider ${providerId} after ${circuit.failures} failures`,
       );
     }
   }
 
-  private emitStateChange(circuit: any, newState: CircuitState) {
+  private emitStateChange(circuit: CircuitBreakerState, newState: 'CLOSED' | 'OPEN' | 'HALF_OPEN', providerId: string) {
     if (circuit.state !== newState) {
-      this.eventEmitter.emit("circuit.state.change", {
-        providerId: circuit.providerId,
+      this.eventEmitter.emit('circuit.state.change', {
+        providerId,
         state: newState,
         timestamp: new Date(),
       });
     }
   }
 
-  getCircuitState(providerId: string): CircuitState {
-    return this.circuits.get(providerId)?.state || CircuitState.CLOSED;
+  getCircuitState(providerId: string): 'CLOSED' | 'OPEN' | 'HALF_OPEN' {
+    return this.circuits.get(providerId)?.state || 'CLOSED';
   }
 
   getCircuitStats(providerId: string) {
@@ -150,5 +126,20 @@ export class CircuitBreakerService {
       lastFailureTime: circuit.lastFailureTime,
       lastSuccessTime: circuit.lastSuccessTime,
     };
+  }
+
+  private getOrCreateState(providerId: string): CircuitBreakerState {
+    if (!this.circuits.has(providerId)) {
+      this.circuits.set(providerId, {
+        state: 'CLOSED',
+        failures: 0
+      });
+    }
+
+    return this.circuits.get(providerId)!;
+  }
+
+  getState(providerId: string): CircuitBreakerState {
+    return this.getOrCreateState(providerId);
   }
 }

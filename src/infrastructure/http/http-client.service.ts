@@ -1,16 +1,10 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { HttpService } from "@nestjs/axios";
-import { firstValueFrom } from "rxjs";
-import { AxiosRequestConfig, AxiosResponse } from "axios";
-import {
-  CircuitBreakerService,
-  CircuitBreakerOptions,
-} from "../resilience/circuit-breaker.service";
-import { RetryService, RetryOptions } from "../resilience/retry.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
+import { AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios';
+import { CircuitBreakerService, CircuitBreakerOptions } from '../resilience/circuit-breaker.service';
+import { RetryService, RetryOptions } from '../resilience/retry.service';
 
-/**
- * Enhanced HTTP client with resilience patterns
- */
 @Injectable()
 export class HttpClientService {
   private readonly logger = new Logger(HttpClientService.name);
@@ -21,20 +15,12 @@ export class HttpClientService {
     private readonly retryService: RetryService,
   ) {}
 
-  /**
-   * Make a resilient HTTP GET request with retries and circuit breaker
-   */
-  async get<T = any>(
-    url: string,
-    config?: AxiosRequestConfig,
-    circuitOptions?: CircuitBreakerOptions,
-    retryOptions?: RetryOptions,
-  ): Promise<AxiosResponse<T>> {
+  async get<T = any>(url: string, config?: AxiosRequestConfig, circuitOptions?: CircuitBreakerOptions, retryOptions?: RetryOptions): Promise<AxiosResponse<T>> {
     const defaultCircuitOptions: CircuitBreakerOptions = {
       failureThreshold: 3,
-      resetTimeout: 30000, // 30 seconds
-      halfOpenTimeout: 15000, // 15 seconds
-      ...(circuitOptions || {}),
+      resetTimeout: 30000,
+      halfOpenTimeout: 15000,
+      ...(circuitOptions || {})
     };
 
     return this.circuitBreakerService.execute(
@@ -43,37 +29,24 @@ export class HttpClientService {
         return this.retryService.execute(async () => {
           this.logger.debug(`Making GET request to ${url}`);
           try {
-            const response = await firstValueFrom(
-              this.httpService.get<T>(url, config),
-            );
-            return response;
+            return await firstValueFrom(this.httpService.get<T>(url, config));
           } catch (error) {
-            this.logger.error(
-              `Error in HTTP GET request to ${url}: ${error.message}`,
-            );
+            const axiosError = error as AxiosError;
+            this.logger.error(`Error in HTTP GET request to ${url}: ${axiosError.message}`);
             throw error;
           }
-        }, retryOptions);
+        }, retryOptions || undefined);
       },
       defaultCircuitOptions,
     );
   }
 
-  /**
-   * Make a resilient HTTP POST request with retries and circuit breaker
-   */
-  async post<T = any>(
-    url: string,
-    data?: any,
-    config?: AxiosRequestConfig,
-    circuitOptions?: CircuitBreakerOptions,
-    retryOptions?: RetryOptions,
-  ): Promise<AxiosResponse<T>> {
+  async post<T = any>(url: string, data?: any, config?: AxiosRequestConfig, circuitOptions?: CircuitBreakerOptions, retryOptions?: RetryOptions): Promise<AxiosResponse<T>> {
     const defaultCircuitOptions: CircuitBreakerOptions = {
       failureThreshold: 3,
-      resetTimeout: 30000, // 30 seconds
-      halfOpenTimeout: 15000, // 15 seconds
-      ...(circuitOptions || {}),
+      resetTimeout: 30000,
+      halfOpenTimeout: 15000,
+      ...(circuitOptions || {})
     };
 
     return this.circuitBreakerService.execute(
@@ -82,17 +55,13 @@ export class HttpClientService {
         return this.retryService.execute(async () => {
           this.logger.debug(`Making POST request to ${url}`);
           try {
-            const response = await firstValueFrom(
-              this.httpService.post<T>(url, data, config),
-            );
-            return response;
+            return await firstValueFrom(this.httpService.post<T>(url, data, config));
           } catch (error) {
-            this.logger.error(
-              `Error in HTTP POST request to ${url}: ${error.message}`,
-            );
+            const axiosError = error as AxiosError;
+            this.logger.error(`Error in HTTP POST request to ${url}: ${axiosError.message}`);
             throw error;
           }
-        }, retryOptions);
+        }, retryOptions || undefined);
       },
       defaultCircuitOptions,
     );

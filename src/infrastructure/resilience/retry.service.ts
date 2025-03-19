@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from '@nestjs/common';
 
 export interface RetryOptions {
   maxAttempts: number;
@@ -10,66 +10,59 @@ export interface RetryOptions {
 
 @Injectable()
 export class RetryService {
-  private readonly logger = new Logger(RetryService.name);
-  private readonly defaultRetryableErrors = [
-    "ECONNRESET",
-    "ETIMEDOUT",
-    "ECONNREFUSED",
-  ];
+  private readonly defaultRetryableErrors = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'];
 
-  async execute<T>(
-    operation: () => Promise<T>,
-    options: RetryOptions = {
-      maxAttempts: 3,
-      initialDelay: 1000,
-      maxDelay: 10000,
-      backoffFactor: 2,
-      retryableErrors: this.defaultRetryableErrors,
-    },
-  ): Promise<T> {
-    let lastError: Error = new Error("No error occurred");
-    let delay = options.initialDelay;
+  private readonly defaultOptions: RetryOptions = {
+    maxAttempts: 3,
+    initialDelay: 1000,
+    maxDelay: 10000,
+    backoffFactor: 2,
+    retryableErrors: this.defaultRetryableErrors
+  };
 
-    for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
+  private handleError(error: unknown, context: string): never {
+    if (error instanceof Error) {
+      throw new Error(`Error in ${context}: ${error.message}`);
+    }
+
+    throw new Error(`Unknown error in ${context}`);
+  }
+
+  private shouldRetry(error: unknown, options: RetryOptions): boolean {
+    if (!(error instanceof Error)) return false;
+    const retryableErrors = options.retryableErrors || this.defaultRetryableErrors;
+    return retryableErrors.some((retryableError) => error.message.includes(retryableError));
+  }
+
+  private calculateDelay(attempt: number, options: RetryOptions): number {
+    const delay = options.initialDelay * Math.pow(options.backoffFactor, attempt - 1);
+    return Math.min(delay, options.maxDelay);
+  }
+
+  async execute<T>(operation: () => Promise<T>, options: RetryOptions = this.defaultOptions): Promise<T> {
+    let lastError: Error | undefined;
+    let attempts = 0;
+
+    while (attempts < options.maxAttempts) {
       try {
+        attempts++;
         return await operation();
       } catch (error) {
-        lastError = error;
+        lastError = error instanceof Error ? error : new Error(String(error));
 
-        if (
-          !this.shouldRetry(
-            error,
-            options.retryableErrors || this.defaultRetryableErrors,
-          )
-        ) {
-          this.logger.error(`Non-retryable error occurred: ${error.message}`);
-          throw error;
+        if (!this.shouldRetry(error, options)) {
+          this.handleError(error, 'retry.execute');
         }
 
-        if (attempt === options.maxAttempts) {
-          this.logger.error(
-            `Max retry attempts (${options.maxAttempts}) reached. Last error: ${error.message}`,
-          );
-          throw error;
+        if (attempts === options.maxAttempts) {
+          this.handleError(error, 'retry.execute');
         }
 
-        this.logger.warn(
-          `Attempt ${attempt} failed: ${error.message}. Retrying in ${delay}ms...`,
-        );
-
-        await this.delay(delay);
-        delay = Math.min(delay * options.backoffFactor, options.maxDelay);
+        await this.delay(this.calculateDelay(attempts, options));
       }
     }
 
-    throw lastError;
-  }
-
-  private shouldRetry(error: Error, retryableErrors: string[]): boolean {
-    const errorMessage = error.message.toUpperCase();
-    return retryableErrors.some((retryableError) =>
-      errorMessage.includes(retryableError.toUpperCase()),
-    );
+    this.handleError(lastError, 'retry.execute');
   }
 
   private delay(ms: number): Promise<void> {

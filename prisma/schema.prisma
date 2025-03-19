@@ -15,41 +15,44 @@ datasource db {
 
 // Product model to store aggregated product data
 model Product {
-  id           String        @id @default(uuid())
-  name         String
-  description  String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  lastFetchedAt DateTime     @default(now()) // When the product was last successfully fetched from provider
-  isStale      Boolean       @default(false) // Flag to indicate if data is considered stale
-  providerId   String        // Original ID from the provider
-  providerName String        // Name of the provider
-  prices       Price[]
-  availability Availability[]
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  price         Float
+  currency      String
+  isAvailable   Boolean       @default(true)
+  provider      String
+  providerId    String
+  lastFetchedAt DateTime      @default(now())
+  isStale       Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  prices        Price[]
+  availability  Availability[]
 
-  @@index([providerName, providerId]) // Index for faster provider queries
-  @@index([isStale]) // Index for faster stale data queries
+  @@index([providerId])
+  @@index([lastFetchedAt])
 }
 
 // Price model to track price history
 model Price {
-  id          String    @id @default(uuid())
-  value       Float
-  currency    String
-  createdAt   DateTime  @default(now())
-  product     Product   @relation(fields: [productId], references: [id])
-  productId   String
+  id        String   @id @default(uuid())
+  amount    Float
+  currency  String
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+  productId String
 
-  @@index([productId, createdAt]) // Index for faster price history queries
+  @@index([productId])
 }
 
 // Availability model to track availability history
 model Availability {
-  id          String    @id @default(uuid())
-  isAvailable Boolean
-  createdAt   DateTime  @default(now())
-  product     Product   @relation(fields: [productId], references: [id])
+  id          String   @id @default(uuid())
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  product     Product  @relation(fields: [productId], references: [id])
   productId   String
 
-  @@index([productId, createdAt]) // Index for faster availability history queries
+  @@index([productId])
 }
