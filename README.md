@@ -1,273 +1,351 @@
 # Product Price Aggregator
 
-A NestJS application that aggregates pricing and availability data for digital products from multiple external APIs, built with Clean Architecture principles.
+A NestJS-based API that aggregates product pricing and availability data from multiple providers in real-time, with history tracking, filtering capabilities, and visualization.
 
-## Features
+## Project Overview
 
-- Real-time price and availability aggregation from multiple providers
-- Clean Architecture implementation for better maintainability
-- REST API with Swagger documentation
-- Server-Sent Events (SSE) for real-time updates
-- API key authentication
-- Rate limiting
-- Health monitoring
-- Docker support for easy deployment
-- Price history tracking with timestamps
-- Stale data detection and marking
-- Efficient data normalization from various providers
-- Concurrent data fetching with resilience patterns
+This service aggregates pricing and availability data for digital products (e-books, software licenses, digital courses) from multiple simulated third-party providers. The API collects data in real-time, normalizes it into a consistent format, stores it efficiently using Prisma and PostgreSQL, and provides RESTful endpoints for consumers to query the aggregated data.
 
-## Tech Stack
+### Key Features
 
-- NestJS (TypeScript)
-- PostgreSQL with Prisma ORM
-- Redis for caching
-- Docker & Docker Compose
-- Swagger for API documentation
+- **Real-time data aggregation** from multiple providers with configurable intervals
+- **Concurrent data fetching** with proper error handling and retries
+- **Price and availability history** tracking with timestamps
+- **Comprehensive filtering capabilities** by name, price range, availability, and provider
+- **Stale data detection** to identify outdated product information
+- **Server-Sent Events (SSE)** for real-time data visualization without WebSockets
+- **Circuit breaker pattern** for resilient provider connections
+- **API key authentication** for secure access to endpoints
+- **Swagger documentation** for easy API exploration
 
-## Quick Start
+## Architecture
+
+### System Components
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  Provider APIs  │───▶│  Aggregator API  │───▶│  Client Apps    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                             │     ▲
+                             ▼     │
+                        ┌──────────────────┐
+                        │   PostgreSQL     │
+                        │   Database       │
+                        └──────────────────┘
+```
+
+### Tech Stack
+
+- **Backend Framework**: NestJS with TypeScript
+- **Database ORM**: Prisma
+- **Database**: PostgreSQL
+- **Cache**: Redis (via NestJS CacheManager)
+- **Authentication**: API Key
+- **Documentation**: Swagger/OpenAPI
+- **Visualization**: Server-Sent Events (SSE)
+- **Testing**: Jest
+
+### Design Patterns
+
+- **Repository Pattern**: Separation of data access logic (ProductRepository)
+- **Service Layer**: Business logic encapsulation (AggregatorService, ProductService)
+- **Circuit Breaker**: For resilient provider communication (CircuitBreakerService)
+- **Retry Pattern**: Automatic retry with exponential backoff (RetryConfig)
+- **Event-Based Architecture**: For real-time updates via EventEmitter
+- **Dependency Injection**: NestJS's core pattern for loose coupling
+
+## Setup and Installation
 
 ### Prerequisites
 
-- Node.js (v20+)
-- npm
-- Docker and Docker Compose
+- Node.js (v16 or later)
+- PostgreSQL
+- Docker and Docker Compose (recommended)
 
-### Running the Application
+### Environment Configuration
 
-1. Clone the repository:
-```bash
-git clone <repository-url>
-cd price-aggregator-nest
+1. Clone the repository
+2. Copy the `.env.example` file to `.env` and update values as needed:
+
+```
+# Database Configuration
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/price_aggregator?schema=public"
+
+# API Security
+API_KEY="your-secret-api-key"
+
+# Redis Cache Configuration
+REDIS_HOST="localhost"
+REDIS_PORT=6379
+CACHE_TTL=60
+CACHE_MAX_ITEMS=100
+
+# HTTP Client Configuration
+HTTP_TIMEOUT=5000
+HTTP_MAX_RETRIES=3
+HTTP_MAX_REDIRECTS=5
+CIRCUIT_BREAKER_FAILURE_THRESHOLD=5
+CIRCUIT_BREAKER_RESET_TIMEOUT=60000
+CIRCUIT_BREAKER_HALF_OPEN_TIMEOUT=30000
+
+# Application Settings
+PORT=3000
+NODE_ENV=development
+FETCH_INTERVAL=10000
+DEFAULT_TIMEFRAME=3600000
+APP_URL="http://localhost:3000"
 ```
 
-2. Install dependencies:
+### Installation
+
+#### Using Docker (Recommended)
+
+1. Make sure Docker and Docker Compose are installed
+2. Run:
+
+```bash
+docker-compose up -d
+```
+
+This will start:
+- PostgreSQL database
+- Redis cache
+- The NestJS application
+
+#### Manual Installation
+
+1. Install dependencies:
+
 ```bash
 npm install
 ```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env
-```
-
-4. Choose one of the following deployment options:
-
-The application uses a deployment script with various options:
+2. Set up the database:
 
 ```bash
-# Start only database services (PostgreSQL + Redis)
-./deployment/deploy.sh --dev
-
-# Start the full application stack in production mode
-./deployment/deploy.sh --prod
-
-# Build containers with latest changes
-./deployment/deploy.sh --prod --build
-
-# Stop all containers
-./deployment/deploy.sh --down
-
-# View container logs
-./deployment/deploy.sh --logs
-
-# Check container status
-./deployment/deploy.sh --status
-
-# Restart containers
-./deployment/deploy.sh --restart
-
-# Clean up containers, images, and volumes
-./deployment/deploy.sh --clean
-
-# Remove unused Docker resources
-./deployment/deploy.sh --prune
-
-# Create a new database migration
-./deployment/deploy.sh --migrate <migration_name>
-
-# Skip database migrations during deployment
-./deployment/deploy.sh --prod --skip-migrations
+npx prisma migrate dev
 ```
 
-## Project Structure
-
-The project follows Clean Architecture principles:
-
-```
-src/
-├── api/              # API layer (controllers, routes)
-├── application/      # Application layer (use cases, services)
-├── core/             # Core layer (interfaces, shared code)
-├── domain/           # Domain layer (entities, value objects)
-└── infrastructure/   # Infrastructure layer (repositories, external services)
-```
-
-## API Endpoints
-
-### Authentication
-All endpoints except `/api-docs`, `/visualize`, and `/api/health` require an API key.
-
-**Header**: `x-api-key: your-api-key`
-
-### Available Endpoints
-
-#### Products
-```http
-# Get all products
-GET /api/products
-Query Parameters:
-  - name: string (optional) - Filter by product name
-  - minPrice: number (optional) - Minimum price filter
-  - maxPrice: number (optional) - Maximum price filter
-  - availability: boolean (optional) - Filter by availability
-  - provider: string (optional) - Filter by provider
-  - includeStale: boolean (optional) - Include stale products
-  - page: number (optional) - Page number for pagination
-  - limit: number (optional) - Items per page
-
-# Get product by ID
-GET /api/products/:id
-
-# Get products with changes
-GET /api/products/changes
-Query Parameters:
-  - timeframe: number (optional) - Time window in minutes (default: 1440)
-
-# Get stale products
-GET /api/products/stale
-```
-
-#### Provider Endpoints (Simulated External APIs)
-```http
-# Provider One products
-GET /api/provider-one
-
-# Provider Two products
-GET /api/provider-two
-
-# Provider Three products
-GET /api/provider-three
-
-# Provider Four products
-GET /api/provider-four
-```
-
-#### Data Visualization
-```http
-# View real-time product changes
-GET /api/visualize
-
-# SSE endpoint for real-time updates
-GET /api/visualize/events
-```
-
-#### Health & Documentation
-```http
-# Health check
-GET /api/health
-
-# Swagger documentation
-GET /api-docs
-```
-
-## Database Management
+3. Build the application:
 
 ```bash
-# View database UI
-npm run prisma:studio
-
-# Generate Prisma client
-npm run prisma:generate
-
-# Apply database migrations
-npm run prisma:migrate
-
-# Create a new migration
-npx prisma migrate dev --name <migration_name>
+npm run build
 ```
 
-## Architecture
+4. Start the application:
 
-This application implements:
+```bash
+npm run start:dev
+```
 
-1. **Clean Architecture**: Separation of concerns with distinct layers (domain, application, infrastructure)
-2. **Repository Pattern**: Abstracting data access behind repository interfaces
-3. **Dependency Injection**: NestJS's built-in DI container for managing dependencies
-4. **Event-Driven Architecture**: Using NestJS event emitter for real-time updates
-5. **Resilience Patterns**: Error handling, retries, and graceful degradation
+## Running the Application
 
-### Data Flow
+### Development Mode
 
-1. Provider Simulator Services: Simulate external provider APIs with random product data
-2. Provider Service: Fetches data from all providers concurrently at configurable intervals
-3. Product Repository: Normalizes and stores product data, tracking price and availability history
-4. Aggregator Service: Presents unified product data to API consumers
+```bash
+npm run start:dev
+```
 
-## Development
+### Production Mode
+
+```bash
+npm run build
+npm run start:prod
+```
 
 ### Running Tests
+
 ```bash
-# Run all tests
-npm test
-
-# Run tests with coverage
-npm run test:cov
-
-# Run tests in watch mode
-npm run test:watch
+npm run test
 ```
 
-### Code Quality
-```bash
-# Format code
-npm run format
+## API Documentation
 
-# Lint code
-npm run lint
+### Swagger UI
+
+Swagger UI is available at `/api/docs` when the application is running:
+
+```
+http://localhost:3000/api/docs
 ```
 
-## Environment Variables
+### API Endpoints
 
-The project uses environment variables for configuration. A `.env.example` file is provided as a template that you need to copy (as mentioned in step 3 above).
+#### Products
 
-Edit your `.env` file with appropriate values:
+- `GET /api/products` - Get a list of all products with filtering options
+  - Query Parameters:
+    - `name`: Filter by product name (case insensitive)
+    - `minPrice`: Filter by minimum price
+    - `maxPrice`: Filter by maximum price
+    - `availability`: Filter by availability status (true/false)
+    - `provider`: Filter by provider name
+    - `includeStale`: Include stale products (true/false)
+    - `page`: Page number (default: 1)
+    - `limit`: Items per page (default: 10)
+  - Response: List of products with pagination info
 
-```env
-# Database
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/price-aggregator"
+- `GET /api/products/:id` - Get detailed product information including price history
+  - Response: Product details with price and availability history
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+- `GET /api/products/changes` - Get products with recent price or availability changes
+  - Query Parameters:
+    - `timeframe`: Time frame in minutes to check for changes (default: 60)
+  - Response: List of products with recent changes
 
-# Application
-PORT=3000
-API_KEY=your-api-key
-FETCH_INTERVAL=10000
-STALENESS_THRESHOLD=60000
+- `GET /api/products/stale` - Get products that have not been updated recently
+  - Response: List of stale products
+
+#### Live Data View
+
+- `GET /api/live` - Simple HTML page for real-time data visualization
+- `GET /api/live/events` - Server-Sent Events endpoint for real-time updates
+
+#### Health Check
+
+- `GET /api/health` - Basic health check endpoint to verify service status
+
+### Authentication
+
+API endpoints are protected by API key authentication. Include the API key in the request header:
+
+```
+X-API-KEY: your-api-key
 ```
 
-**Note**: The `.env` file is excluded from Git in `.gitignore` to prevent committing sensitive information.
+## Database Schema
 
-## Error Handling and Resilience
+### Main Tables
 
-The application implements the following resilience patterns:
+- **Product**: Core product information
+- **Price**: Historical price records
+- **Availability**: Historical availability records
 
-1. **Automatic Retries**: Failed provider requests are retried with exponential backoff
-2. **Circuit Breaker**: Prevents cascading failures when a provider is consistently failing
-3. **Fallbacks**: Default values are used when provider data is unavailable
-4. **Graceful Degradation**: The system continues to operate (with reduced functionality) when some providers are down
-5. **Comprehensive Logging**: Detailed logs for debugging and monitoring
+### Schema Overview
 
-## Performance Optimization
+```prisma
+// Product model to store aggregated product data
+model Product {
+  id            String        @id @default(uuid())
+  name          String
+  description   String?
+  price         Float
+  currency      String
+  isAvailable   Boolean       @default(true)
+  provider      String
+  providerId    String
+  lastFetchedAt DateTime      @default(now())
+  isStale       Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  prices        Price[]
+  availability  Availability[]
 
-1. **Concurrent Processing**: All provider requests are executed in parallel
-2. **Caching**: Frequently accessed data is cached in Redis
-3. **Database Indexing**: Appropriate indexes for efficient querying
-4. **Query Optimization**: Efficient database queries with proper joining and filtering
-5. **Rate Limiting**: Protection against excessive API usage
+  @@index([providerId])
+  @@index([lastFetchedAt])
+}
 
-## License
+// Price model to track price history
+model Price {
+  id        String   @id @default(uuid())
+  amount    Float
+  currency  String
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id])
+  productId String
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+  @@index([productId])
+}
+
+// Availability model to track availability history
+model Availability {
+  id          String   @id @default(uuid())
+  isAvailable Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  product     Product  @relation(fields: [productId], references: [id])
+  productId   String
+
+  @@index([productId])
+}
+```
+
+## Data Flow
+
+1. **Provider Simulation**:
+   - Four simulated providers (ProviderOneService, ProviderTwoService, etc.) generate product data
+   - Each provider has its own data structure and update frequency
+   - Prices and availability are randomly updated at intervals
+
+2. **Data Collection**:
+   - `ProviderService` orchestrates fetching data from all providers concurrently
+   - Circuit breaker pattern helps handle provider outages or slow responses
+   - Data is fetched at intervals defined by `FETCH_INTERVAL` environment variable
+
+3. **Data Processing and Normalization**:
+   - Data from different providers is normalized to a consistent format
+   - Products are stored using efficient upsert operations
+   - Price and availability history is preserved in separate tables
+   - Stale products are marked based on their `lastFetchedAt` timestamp
+
+4. **Data Access via API**:
+   - RESTful endpoints provide filtered access to the data
+   - Caching improves response times for common queries
+   - Server-Sent Events (SSE) provide real-time updates to clients
+
+## Design Decisions and Trade-offs
+
+### Provider Simulation
+
+- **Decision**: Implemented provider simulation as part of the main application
+- **Alternative**: Separate microservices for each provider
+- **Rationale**: Simplifies deployment for the MVP; could be separated later for more realistic simulation
+
+### Data Storage Strategy
+
+- **Decision**: Store latest values in Product table with history in separate tables
+- **Alternative**: Event sourcing pattern with only history tables
+- **Rationale**: Balances query performance with historical data needs
+
+### Caching Strategy
+
+- **Decision**: Use NestJS's CacheInterceptor with Redis
+- **Alternative**: More granular caching at the repository level
+- **Rationale**: Provides good performance with minimal code complexity
+
+### Resilience Patterns
+
+- **Decision**: Circuit breaker with retry mechanism
+- **Alternative**: More complex patterns like bulkheads or rate limiting
+- **Rationale**: Good balance of resilience without over-engineering
+
+### Error Handling
+
+- **Decision**: Graceful error handling with logging
+- **Alternative**: More sophisticated error tracking and recovery
+- **Rationale**: Adequate for an MVP while maintaining service stability
+
+## Performance Considerations
+
+- **Database Indexing**: Indexes on frequently queried fields
+- **Connection Pooling**: Prisma handles connection pooling efficiently
+- **Caching**: Frequently-accessed data is cached
+- **Pagination**: Results are paginated to avoid large payloads
+- **Concurrent Fetching**: Providers are queried concurrently
+
+## Testing Strategy
+
+- **Unit Tests**: Test individual services and repositories in isolation
+- **Integration Tests**: Test API endpoints with a test database
+- **End-to-End Tests**: Simulate real user flows (optional)
+
+## Future Enhancements
+
+1. **Advanced Filtering**: More sophisticated query capabilities
+2. **Analytics**: Price trend analysis and prediction
+3. **Webhooks**: Allow consumers to subscribe to price/availability changes
+4. **Admin Interface**: Web UI for managing providers and monitoring data quality
+5. **Performance Optimizations**: More sophisticated caching and indexing
+
+## Acknowledgements
+
+This project was developed as a technical assignment to demonstrate real-time data aggregation capabilities using NestJS and Prisma.

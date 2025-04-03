@@ -1,23 +1,45 @@
-import {
-  Injectable,
-  Logger,
-  OnModuleInit,
-  OnModuleDestroy,
-} from "@nestjs/common";
-import { ProductService } from "./product.service";
-import { ProviderService } from "./provider.service";
+import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+
+import { PrismaService } from '../../infrastructure/persistence/prisma/prisma.service';
+import { ProductChangesDto } from '../../domain/dto/product-changes.dto';
+import { ProductService } from './product.service';
+import { ProviderService } from './provider.service';
+
+interface ProductWithHistory {
+  id: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency: string;
+  isAvailable: boolean;
+  provider: string;
+  providerId: string;
+  lastFetchedAt: Date;
+  isStale: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  priceHistory?: Array<{
+    amount: number;
+    currency: string;
+    timestamp: Date;
+  }>;
+  availabilityHistory?: Array<{
+    isAvailable: boolean;
+    timestamp: Date;
+  }>;
+}
 
 @Injectable()
 export class AggregatorService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(AggregatorService.name);
-  private stalenessCheckIntervalId: NodeJS.Timeout | null = null;
+  private stalenessCheckIntervalId?: NodeJS.Timeout;
 
-  constructor(
+  constructor (
     private readonly productService: ProductService,
     private readonly providerService: ProviderService,
+    private readonly prisma: PrismaService
   ) {}
 
-  onModuleInit() {
+  onModuleInit () {
     this.providerService.startFetchingData();
 
     this.stalenessCheckIntervalId = setInterval(() => {
@@ -25,28 +47,25 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
     }, 60000);
   }
 
-  onModuleDestroy() {
+  onModuleDestroy () {
     this.providerService.stopFetchingData();
 
     if (this.stalenessCheckIntervalId) {
       clearInterval(this.stalenessCheckIntervalId);
-      this.stalenessCheckIntervalId = null;
+      delete this.stalenessCheckIntervalId;
     }
   }
 
-  async getStaleProducts() {
+  async getStaleProducts () {
     try {
       const products = await this.productService.getStaleProducts();
       return { data: products };
-    } catch (error) {
-      this.logger.error(
-        `Error getting stale products: ${error instanceof Error ? error.message : String(error)}`,
-      );
+    } catch {
       return { data: [] };
     }
   }
 
-  async getAllProducts(filters?: {
+  async getAllProducts (filters?: {
     name?: string;
     minPrice?: number;
     maxPrice?: number;
@@ -58,43 +77,102 @@ export class AggregatorService implements OnModuleInit, OnModuleDestroy {
   }) {
     try {
       return await this.productService.getAllProducts(filters);
-    } catch (error) {
-      this.logger.error(
-        `Error getting all products: ${error instanceof Error ? error.message : String(error)}`,
-      );
-
+    } catch {
       return {
         data: [],
         total: 0,
         page: filters?.page || 1,
-        limit: filters?.limit || 10,
+        limit: filters?.limit || 10
       };
     }
   }
 
-  async getProductById(id: string) {
+  async getProductById (id: string) {
     try {
-      const product = await this.productService.getProductById(id);
-      return { data: product };
-    } catch (error) {
-      this.logger.error(
-        `Error getting product by ID ${id}: ${error instanceof Error ? error.message : String(error)}`,
-      );
+      const product = (await this.productService.getProductById(id)) as unknown as ProductWithHistory;
+      if (!product) {
+        throw new Error(`Product with ID ${id} not found`);
+      }
 
-      return { data: null };
+      return {
+        data: product,
+        priceHistory: product.priceHistory || [],
+        availabilityHistory: product.availabilityHistory || []
+      };
+    } catch {
+      return { data: null, priceHistory: [], availabilityHistory: [] };
     }
   }
 
-  async getChanges(timeframe?: number) {
+  async getChanges (timeframe?: number) {
     try {
       const changes = await this.providerService.getChanges(timeframe);
       return { data: changes };
-    } catch (error) {
-      this.logger.error(
-        `Error getting changes: ${error instanceof Error ? error.message : String(error)}`,
-      );
-
+    } catch {
       return { data: [] };
     }
+  }
+
+  async getProductChanges (timeframe: number): Promise<ProductChangesDto[]> {
+    const cutoffTime = new Date(Date.now() - timeframe);
+
+    const changes = await this.prisma.product.findMany({
+      where: {
+        OR: [
+          {
+            prices: {
+              some: {
+                createdAt: {
+                  gte: cutoffTime
+                }
+              }
+            }
+          },
+          {
+            availability: {
+              some: {
+                createdAt: {
+                  gte: cutoffTime
+                }
+              }
+            }
+          }
+        ]
+      },
+      include: {
+        prices: {
+          where: {
+            createdAt: {
+              gte: cutoffTime
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        },
+        availability: {
+          where: {
+            createdAt: {
+              gte: cutoffTime
+            }
+          },
+          orderBy: {
+            createdAt: 'desc'
+          },
+          take: 1
+        }
+      }
+    });
+
+    return changes.map((product) => ({
+      id: product.id,
+      name: product.name,
+      price: product.prices[0]?.amount ?? product.price,
+      currency: product.prices[0]?.currency ?? product.currency,
+      isAvailable: product.availability[0]?.isAvailable ?? product.isAvailable,
+      provider: product.provider,
+      changedAt: product.prices[0]?.createdAt ?? product.availability[0]?.createdAt ?? product.updatedAt
+    }));
   }
 }

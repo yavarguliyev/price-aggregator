@@ -1,8 +1,9 @@
-import { Injectable } from "@nestjs/common";
-import { EventEmitter2 } from "@nestjs/event-emitter";
-import { ProductRepository } from "../../infrastructure/persistence/product.repository";
-import { Prisma } from "@prisma/client";
-import { handleError } from "../../core/utils/error-handler.util";
+import { Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
+
+import { ProductRepository } from '../../infrastructure/persistence/product.repository';
+import { handleError } from '../../core/utils/error-handler.util';
 
 type ProductWithRelations = Prisma.ProductGetPayload<{
   include: {
@@ -13,32 +14,32 @@ type ProductWithRelations = Prisma.ProductGetPayload<{
 
 @Injectable()
 export class ProductService {
-  constructor(
+  constructor (
     private readonly productRepository: ProductRepository,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly eventEmitter: EventEmitter2
   ) {}
 
-  async checkAndMarkStaleProducts(): Promise<void> {
+  async checkAndMarkStaleProducts (): Promise<void> {
     try {
-      const stalenessThreshold = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+      const stalenessThreshold = 24 * 60 * 60 * 1000;
       await this.productRepository.markStaleProducts(stalenessThreshold);
-      this.eventEmitter.emit("products.stale.checked", {
-        timestamp: new Date(),
+      this.eventEmitter.emit('products.stale.checked', {
+        timestamp: new Date()
       });
     } catch (error) {
-      handleError(error, "checkAndMarkStaleProducts");
+      handleError(error, 'checkAndMarkStaleProducts');
     }
   }
 
-  async getStaleProducts() {
+  async getStaleProducts () {
     try {
       return await this.productRepository.findStaleProducts();
     } catch (error) {
-      handleError(error, "getStaleProducts");
+      handleError(error, 'getStaleProducts');
     }
   }
 
-  async getProductById(id: string) {
+  async getProductById (id: string) {
     try {
       const product = await this.productRepository.findById(id);
       if (!product) {
@@ -47,11 +48,12 @@ export class ProductService {
 
       return product;
     } catch (error) {
-      handleError(error, "getProductById");
+      handleError(error, 'getProductById');
+      return null;
     }
   }
 
-  async getAllProducts(filters?: {
+  async getAllProducts (filters?: {
     name?: string;
     minPrice?: number;
     maxPrice?: number;
@@ -65,7 +67,7 @@ export class ProductService {
       const where: Prisma.ProductWhereInput = {};
 
       if (filters?.name) {
-        where.name = { contains: filters.name, mode: "insensitive" };
+        where.name = { contains: filters.name, mode: 'insensitive' };
       }
 
       if (filters?.provider) {
@@ -85,9 +87,9 @@ export class ProductService {
           skip,
           take: limit,
           where,
-          orderBy: { updatedAt: "desc" },
+          orderBy: { updatedAt: 'desc' }
         }),
-        this.productRepository.count(where),
+        this.productRepository.count(where)
       ]);
 
       const mappedProducts = products.map((product: ProductWithRelations) => {
@@ -96,45 +98,39 @@ export class ProductService {
           name: product.name,
           description: product.description,
           price: product.prices?.[0]?.amount || 0,
-          currency: product.prices?.[0]?.currency || "USD",
+          currency: product.prices?.[0]?.currency || 'USD',
           isAvailable: product.availability?.[0]?.isAvailable || false,
           provider: product.provider,
           providerId: product.providerId,
           lastFetchedAt: product.lastFetchedAt,
           isStale: product.isStale,
           createdAt: product.createdAt,
-          updatedAt: product.updatedAt,
+          updatedAt: product.updatedAt
         };
       });
 
       let filteredProducts = mappedProducts;
 
       if (filters?.minPrice !== undefined) {
-        filteredProducts = filteredProducts.filter(
-          (p) => p.price >= filters.minPrice!,
-        );
+        filteredProducts = filteredProducts.filter((p) => p.price >= filters.minPrice!);
       }
 
       if (filters?.maxPrice !== undefined) {
-        filteredProducts = filteredProducts.filter(
-          (p) => p.price <= filters.maxPrice!,
-        );
+        filteredProducts = filteredProducts.filter((p) => p.price <= filters.maxPrice!);
       }
 
       if (filters?.availability !== undefined) {
-        filteredProducts = filteredProducts.filter(
-          (p) => p.isAvailable === filters.availability,
-        );
+        filteredProducts = filteredProducts.filter((p) => p.isAvailable === filters.availability);
       }
 
       return {
         data: filteredProducts,
         total,
         page,
-        limit,
+        limit
       };
     } catch (error) {
-      handleError(error, "getAllProducts");
+      handleError(error, 'getAllProducts');
     }
   }
 }

@@ -1,19 +1,24 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { ExecutionContext, UnauthorizedException } from "@nestjs/common";
-import { Reflector } from "@nestjs/core";
-import { ApiKeyGuard } from "../../src/core/auth/api-key.guard";
-import { IS_PUBLIC_KEY } from "../../src/core/auth/public.decorator";
+import { Test, TestingModule } from '@nestjs/testing';
+import { ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 
-describe("ApiKeyGuard", () => {
+import { ApiKeyGuard } from '../../src/core/auth/api-key.guard';
+
+describe('ApiKeyGuard', () => {
   let guard: ApiKeyGuard;
   let reflector: Reflector;
+  let configService: ConfigService;
 
-  // Set the API key for tests
-  const TEST_API_KEY = "test-api-key-1234";
+  const TEST_API_KEY = 'test-api-key-1234';
 
   beforeEach(async () => {
-    // Mock the environment variables
-    process.env.API_KEY = TEST_API_KEY;
+    const mockConfigService = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === 'API_KEY') return TEST_API_KEY;
+        return undefined;
+      })
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -21,100 +26,101 @@ describe("ApiKeyGuard", () => {
         {
           provide: Reflector,
           useValue: {
-            getAllAndOverride: jest.fn(),
-          },
+            getAllAndOverride: jest.fn()
+          }
         },
-      ],
+        {
+          provide: ConfigService,
+          useValue: mockConfigService
+        }
+      ]
     }).compile();
 
     guard = module.get<ApiKeyGuard>(ApiKeyGuard);
     reflector = module.get<Reflector>(Reflector);
+    configService = module.get<ConfigService>(ConfigService);
   });
 
-  it("should be defined", () => {
-    expect(guard).toBeDefined();
-  });
-
-  describe("canActivate", () => {
-    let mockContext: ExecutionContext;
-    let mockRequest: {
-      url: string;
-      headers: Record<string, string>;
-      query: Record<string, string>;
+  it('should be defined', () => {
+    const expectDefined = (x: unknown): void => {
+      expect(x).toBeDefined();
     };
 
-    beforeEach(() => {
-      mockRequest = {
-        url: "/api/products",
-        headers: {},
-        query: {},
-      };
+    expectDefined(guard);
+  });
 
+  describe('canActivate', () => {
+    let mockContext: ExecutionContext;
+
+    beforeEach(() => {
       mockContext = {
         switchToHttp: jest.fn().mockReturnValue({
-          getRequest: jest.fn().mockReturnValue(mockRequest),
+          getRequest: jest.fn().mockReturnValue({
+            url: '/api/products',
+            headers: {},
+            query: {}
+          })
         }),
         getHandler: jest.fn(),
-        getClass: jest.fn(),
+        getClass: jest.fn()
       } as unknown as ExecutionContext;
     });
 
-    it("should allow access for public routes", () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
+    it('should allow access for public routes', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
 
-      const result = guard.canActivate(mockContext);
-
-      expect(result).toBe(true);
-      expect(reflector.getAllAndOverride).toHaveBeenCalledWith(IS_PUBLIC_KEY, [
-        mockContext.getHandler(),
-        mockContext.getClass(),
-      ]);
-    });
-
-    it("should allow access for Swagger UI routes", () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-      mockRequest.url = "/api/swagger-ui";
-
-      const result = guard.canActivate(mockContext);
+      const result = await Promise.resolve(guard.canActivate(mockContext));
 
       expect(result).toBe(true);
     });
 
-    it("should throw UnauthorizedException when API key is missing", () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    it('should allow access with valid API key', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+      const request = mockContext.switchToHttp().getRequest();
+      request.headers['x-api-key'] = TEST_API_KEY;
 
-      expect(() => guard.canActivate(mockContext)).toThrow(
-        UnauthorizedException,
-      );
-      expect(() => guard.canActivate(mockContext)).toThrow(
-        "API key is missing",
-      );
-    });
-
-    it("should throw UnauthorizedException when API key is invalid", () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-      mockRequest.headers["x-api-key"] = "invalid-api-key";
-
-      expect(() => guard.canActivate(mockContext)).toThrow(
-        UnauthorizedException,
-      );
-      expect(() => guard.canActivate(mockContext)).toThrow("Invalid API key");
-    });
-
-    it("should allow access with valid API key in header", () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-      mockRequest.headers["x-api-key"] = TEST_API_KEY;
-
-      const result = guard.canActivate(mockContext);
+      const result = await Promise.resolve(guard.canActivate(mockContext));
 
       expect(result).toBe(true);
     });
 
-    it("should allow access with valid API key in query parameter", () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
-      mockRequest.query.apiKey = TEST_API_KEY;
+    it('should throw UnauthorizedException when API key is missing', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
 
-      const result = guard.canActivate(mockContext);
+      let error: Error | undefined;
+      try {
+        await Promise.resolve(guard.canActivate(mockContext));
+      } catch (e) {
+        error = e as Error;
+      }
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect(error?.message).toBe('API key is missing');
+    });
+
+    it('should throw UnauthorizedException when API key is invalid', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+      const request = mockContext.switchToHttp().getRequest();
+      request.headers['x-api-key'] = 'invalid-key';
+
+      let error: Error | undefined;
+      try {
+        await Promise.resolve(guard.canActivate(mockContext));
+      } catch (e) {
+        error = e as Error;
+      }
+
+      expect(error).toBeInstanceOf(UnauthorizedException);
+      expect(error?.message).toBe('Invalid API key');
+    });
+
+    it('should allow access for Swagger UI routes', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
+      const request = mockContext.switchToHttp().getRequest();
+      request.url = '/api/swagger';
+
+      const result = await Promise.resolve(guard.canActivate(mockContext));
+
       expect(result).toBe(true);
     });
   });

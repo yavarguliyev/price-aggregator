@@ -1,14 +1,15 @@
-import { Module } from "@nestjs/common";
-import { ConfigModule } from "@nestjs/config";
-import { EventEmitterModule } from "@nestjs/event-emitter";
-import { ThrottlerModule } from "@nestjs/throttler";
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ThrottlerModule } from '@nestjs/throttler';
 
-import { PrismaModule } from "./infrastructure/persistence/prisma/prisma.module";
-import { RedisCacheModule } from "./infrastructure/cache/cache.module";
-import { ResilienceModule } from "./infrastructure/resilience/resilience.module";
-import { AggregatorModule } from "./infrastructure/modules/aggregator.module";
-import { ProviderSimulatorModule } from "./infrastructure/modules/provider-simulator.module";
-import { HealthModule } from "./infrastructure/modules/health.module";
+import { PrismaModule } from './infrastructure/persistence/prisma/prisma.module';
+import { RedisCacheModule } from './infrastructure/cache/cache.module';
+import { ResilienceModule } from './infrastructure/resilience/resilience.module';
+import { AggregatorModule } from './infrastructure/modules/aggregator.module';
+import { ProviderSimulatorModule } from './infrastructure/modules/provider-simulator.module';
+import { HealthModule } from './infrastructure/modules/health.module';
+import { LiveViewController } from './api/live-view.controller';
 
 @Module({
   imports: [
@@ -20,9 +21,9 @@ import { HealthModule } from "./infrastructure/modules/health.module";
     PrismaModule,
     ProviderSimulatorModule,
     AggregatorModule,
-    HealthModule,
+    HealthModule
   ],
-  controllers: [],
-  providers: [],
+  controllers: [LiveViewController],
+  providers: []
 })
 export class AppModule {}
